@@ -1,6 +1,6 @@
 import numpy as np
 import sys
-sys.path.insert(0,'../trackGeneration')
+sys.path.insert(0,'../../track_features')
 import tGenfunctions
 import pickle
 import time
@@ -34,9 +34,9 @@ def loadDatapy2(filename):
         d = pickle.load(f, encoding='latin1')[0] 
     return d    
 ##INPUTS
-lGen       = loadDatapy2('../trackGeneration/fitL.pickle')  ## draw a width
-cGen       = loadDatapy2('../trackGeneration/fitC.pickle')  ## draw a lenght
-hf         = h5py.File('../noiseCaracterization/noise_data.h5', 'r')
+lGen       = loadDatapy2('../../track_features/fitL.pickle')  ## draw a width
+cGen       = loadDatapy2('../../track_features/fitC.pickle')  ## draw a lenght
+hf         = h5py.File('../data/noise/noise_data.h5', 'r')
 hf.keys()
 imMean     = np.array(hf.get('mean'))
 imStd      = np.array(hf.get('std'))
@@ -48,9 +48,9 @@ del imMean,imStd,runNumber
   
 
 
-nRuns    = 1000
+nRuns    = 250000
 imShape  = (256,256)
-f        = h5py.File('../../bases/db_gen_' + str(date.today()) + 'Run_' + str(nRuns)+'.h5', 'w')
+f        = h5py.File('../data/Runs001/Run' + str(date.today()) +'.h5', 'w')
 l        = np.abs(lGen.sample(nRuns))  ## get only the abs of w
 c        = np.abs(cGen.sample(nRuns))  ## get only the abs of c
 data     = np.append(l,c,axis=1)      # concatenate data
