@@ -48,7 +48,7 @@ del imMean,imStd,runNumber
   
 
 
-nRuns    = 250000
+nRuns    = 300000
 imShape  = (256,256)
 f        = h5py.File('../data/Runs001/Run' + str(date.today()) +'.h5', 'w')
 l        = np.abs(lGen.sample(nRuns))  ## get only the abs of w
