@@ -82,6 +82,16 @@ def auc_calc(roc):
     return auc
 
 
+def im_rebin(im_input, rebin_factor=8):
+    dim = im_input.shape
+    n_imgs = dim[2]
+    index = range(0, dim[0], rebin_factor)
+    xx, yy, zz = np.meshgrid(index, index, range(0, n_imgs))
+    return im_input[xx, yy, zz]
+
+
+
+
 class ResultGeneration:
     # constructor
     def __init__(self, folder, file_noise, run_number, batch_size, bound_sup, bound_inf, roi):
@@ -102,21 +112,24 @@ class ResultGeneration:
     # get pedestal from noise file
     def get_pedestal(self):
         fn = h5py.File(self.file_noise, 'r')  # read file noise
-        ped = fn['mean'] # get pedestal
-        std = fn['std'] # get std
-        return ped[:, :, 820-self.run_number],std[:, :, 820-self.run_number]  # return values according to run number
+        ped = fn['mean']  # get pedestal
+        std = fn['std']  # get std
+        return ped[:, :, 820-self.run_number], std[:, :, 820-self.run_number]  # return values according to run number
 
     # get all h5 simulated files
     def get_file_names(self):
         return glob.glob(self.folder + '/*.h5')  # get all h5 files on interest folder
 
     def result2csv(self):
-        features = np.array([self.contrast, 10 * np.log(self.snr), auc_calc(self.roc), self.windows]).T
-        results = pd.DataFrame(np.append(features, self.filters_name.reshape(-1, 1), axis=1),
+        self.snr = list(itertools.chain.from_iterable(self.snr))
+        self.contrast = list(itertools.chain.from_iterable(self.contrast))
+        self.windows = list(itertools.chain.from_iterable(self.windows))
+        features = np.array([self.contrast, np.array(self.snr), auc_calc(self.roc), self.windows]).T
+        results = pd.DataFrame(np.append(features, np.array(self.filters_name).reshape(-1, 1), axis=1),
                                columns=['contrast', 'SNR', 'AUC', 'w_size', 'filter'])
         results['contrast'] = results['contrast'].astype('float32')
-        results['SNR'] = results['SNR'].astype('float32')
-        results['window'] = results['window'].astype('float')
+        results['SNR'] = (10*np.log(results['SNR'])).astype('float32')
+        results['window'] = results['w_size'].astype('float')
         results.to_csv(r'../data/export_dataframe2.csv', index=None, header=True)
 
     # results for chosen metrics
@@ -124,35 +137,40 @@ class ResultGeneration:
         full_files = self.get_file_names()
         for file_name in full_files:
             f = h5py.File(file_name, 'r')
+            print("Start Analysis")
             obj_x_train = f['x_train']
             obj_y_train = f['y_train']
-            obj_alpha = f['alpha']
+            energy_factor = 1
             size = obj_x_train.shape
             im_dim = int(np.sqrt(size[1]))
             ped, _ = self.get_pedestal()
-            ped = ped[1024 - im_dim // 2:1024 + im_dim // 2, 1024 - im_dim // 2:1024 + im_dim // 2]
+            #ped = ped[1024 - im_dim // 2:1024 + im_dim // 2, 1024 - im_dim // 2:1024 + im_dim // 2]
             idx = list(range(0, size[0], self.batch_size))
             idy = list(range(self.batch_size, size[0], self.batch_size))
             idy.append(size[0])
             for w in wrange:
                 for fname in filters:
                     count = 0
-                    for i,j in zip(idx,idy):
+                    for i, j in zip(idx, idy):
                         im_real = obj_x_train[i:j, :].T.reshape(im_dim, im_dim, j - i)
                         im_truth = obj_y_train[i:j, :].T.reshape(im_dim, im_dim, j - i)
-                        alpha = obj_alpha[i:j]
-                        scale = im_truth.max(axis=0).max(axis=0)
+                        alpha = energy_factor*np.ones(j-i)
+                        #scale = im_truth.max(axis=0).max(axis=0)
                         # multiplica por alpha/pico -> alpha*I
-                        im_truth = im_truth * (alpha / scale)
+                        im_truth = im_truth*alpha
                         # replicando valor do ruido para subtrair
                         multi_ped = np.repeat(ped[:, :, np.newaxis], im_real.shape[2], axis=2)
+                        # rebinando
+                        im_real = im_rebin(im_real)
+                        im_truth = im_rebin(im_truth)
+                        multi_ped = im_rebin(multi_ped)
                         # removendo pedestal
                         im_no_pad = im_real - multi_ped
                         # saturando imagem
-                        im_no_pad[im_no_pad > self.bound_sup] = self.bound_sup
-                        im_no_pad[im_no_pad < self.bound_inf] = self.bound_inf
-                        thresholds = alpha * (np.exp(-self.roi ** 2))  # vetor de thresholds para as imagens do batch
-                        im_bin = im_truth >= thresholds  # definindo como binaria a imagem maior que os threshold
+                        #im_no_pad[im_no_pad > self.bound_sup] = self.bound_sup
+                        #im_no_pad[im_no_pad < self.bound_inf] = self.bound_inf
+                        thresholds = 0  # vetor de thresholds para as imagens do batch
+                        im_bin = im_truth > thresholds  # definindo como binaria a imagem maior que os threshold
                         # filtragem da imagem sem pedestal
                         im_filtered = linear_filtering(im_no_pad, w, fname)
                         # calculo do erro
@@ -174,13 +192,13 @@ def main():
     noise_folder = '../data/noise/noise_data.h5'
     run = 818
     batch_size = 32
-    sup = 35
+    sup = 111
     inf = -10
     roi = 3
     data = ResultGeneration(folder, noise_folder, run, batch_size, sup, inf, roi)
-    wrange = range(1,3,2)
-    filters = ['mean']
-    data.calc_metrics(wrange, filters)
+    w_range = range(1, 7, 2)
+    filters = ['mean', 'gauss']
+    data.calc_metrics(w_range, filters)
     data.result2csv()
 
 
