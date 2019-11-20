@@ -1,11 +1,12 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from scipy.ndimage import convolve
 from scipy import signal
 import h5py
 import glob
 import itertools
+from progress.bar import Bar
+
 
 
 # Criacao de uma mascara gaussiana
@@ -108,6 +109,7 @@ class ResultGeneration:
         self.snr = []
         self.roc = []
         self.contrast = []
+        self.energy = []
 
     # get pedestal from noise file
     def get_pedestal(self):
@@ -124,13 +126,17 @@ class ResultGeneration:
         self.snr = list(itertools.chain.from_iterable(self.snr))
         self.contrast = list(itertools.chain.from_iterable(self.contrast))
         self.windows = list(itertools.chain.from_iterable(self.windows))
-        features = np.array([self.contrast, np.array(self.snr), auc_calc(self.roc), self.windows]).T
+        self.filters_name = list(itertools.chain.from_iterable(self.filters_name))
+        self.energy = list(itertools.chain.from_iterable(self.energy))
+        features = np.array([self.contrast, np.array(self.snr), auc_calc(self.roc), self.windows, self.energy]).T
         results = pd.DataFrame(np.append(features, np.array(self.filters_name).reshape(-1, 1), axis=1),
-                               columns=['contrast', 'SNR', 'AUC', 'w_size', 'filter'])
+                               columns=['contrast', 'SNR', 'AUC', 'w_size', 'Energy', 'filter'])
         results['contrast'] = results['contrast'].astype('float32')
-        results['SNR'] = (10*np.log(results['SNR'])).astype('float32')
+        results['AUC'] = results['AUC'].astype('float32')
+        results['SNR'] = (10*np.log(results['SNR'].astype('float32')))
         results['window'] = results['w_size'].astype('float')
-        results.to_csv(r'../data/export_dataframe2.csv', index=None, header=True)
+        results['Energy'] = results['Energy'].astype('float32')
+        results.to_csv(r'../data/result_1.csv', index=None, header=True)
 
     # results for chosen metrics
     def calc_metrics(self, wrange, filters):
@@ -144,10 +150,10 @@ class ResultGeneration:
             size = obj_x_train.shape
             im_dim = int(np.sqrt(size[1]))
             ped, _ = self.get_pedestal()
-            #ped = ped[1024 - im_dim // 2:1024 + im_dim // 2, 1024 - im_dim // 2:1024 + im_dim // 2]
             idx = list(range(0, size[0], self.batch_size))
             idy = list(range(self.batch_size, size[0], self.batch_size))
             idy.append(size[0])
+            bar = Bar('Processing',  fill='-', max=len(wrange)*len(filters)*len(idx))
             for w in wrange:
                 for fname in filters:
                     count = 0
@@ -161,9 +167,9 @@ class ResultGeneration:
                         # replicando valor do ruido para subtrair
                         multi_ped = np.repeat(ped[:, :, np.newaxis], im_real.shape[2], axis=2)
                         # rebinando
-                        im_real = im_rebin(im_real)
-                        im_truth = im_rebin(im_truth)
-                        multi_ped = im_rebin(multi_ped)
+                        im_real = im_rebin(im_real, rebin_factor=4)
+                        im_truth = im_rebin(im_truth, rebin_factor=4)
+                        multi_ped = im_rebin(multi_ped, rebin_factor=4)
                         # removendo pedestal
                         im_no_pad = im_real - multi_ped
                         # saturando imagem
@@ -183,8 +189,11 @@ class ResultGeneration:
                         self.windows.append([w] * (j - i))
                         # armazenando nome dos filtros
                         self.filters_name.append([fname] * (j - i))
+                        #armazenando energia
+                        self.energy.append((im_truth.sum(0).sum(0))/(im_bin.sum(0).sum(0)))
                         count += 1
-                        print('Batch' + str(count) + ' done' + ' filter --> ' + fname + str(w))
+                        bar.next()
+            bar.finish()
 
 
 def main():
