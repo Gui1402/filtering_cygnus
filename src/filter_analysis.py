@@ -269,8 +269,8 @@ class ResultGeneration:
 
 
 def main():
-    folder = '../data/Runs001'
-    noise_folder = '../data/noise/noise_data.h5'
+    folder = '../data'
+    noise_folder = '../data/noise_data.h5'
     run = 817
     batch_size = 32
     sup = 2
