@@ -181,7 +181,7 @@ class ResultGeneration:
         results['ROCx'] = list(self.roc_values[:, 0, :])
         results['ROCy'] = list(self.roc_values[:, 1, :])
         results['Energy Estimated'] = list(self.energy_values)
-        results.to_csv(r'../data/result_6.csv', index=None, header=True)
+        results.to_csv(r'../data/result.csv', index=None, header=True)
 
     # results for chosen metrics
     def calc_metrics(self, wrange, filters):
