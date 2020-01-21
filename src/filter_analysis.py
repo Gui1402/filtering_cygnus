@@ -277,8 +277,8 @@ def main():
     inf = 0
     roi = 3
     data = ResultGeneration(folder, noise_folder, run, batch_size, sup, inf, roi)
-    w_range = [1, 3, 5, 7, 9]
-    filters = ['median', 'mean', 'gauss']
+    w_range = [1]
+    filters = ['mean']
     data.calc_metrics(w_range, filters)
     data.result2csv()
 
