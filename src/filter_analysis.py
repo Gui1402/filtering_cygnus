@@ -269,16 +269,16 @@ class ResultGeneration:
 
 
 def main():
-    folder = '../data'
-    noise_folder = '../data/noise_data.h5'
+    folder = '../data/Runs001'
+    noise_folder = '../data/noise/noise_data.h5'
     run = 817
     batch_size = 32
     sup = 2
     inf = 0
     roi = 3
     data = ResultGeneration(folder, noise_folder, run, batch_size, sup, inf, roi)
-    w_range = [1]
-    filters = ['mean']
+    w_range = [1,3,5,7,9,11,13]
+    filters = ['mean','gauss','median']
     data.calc_metrics(w_range, filters)
     data.result2csv()
 
