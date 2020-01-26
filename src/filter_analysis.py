@@ -10,6 +10,8 @@ import glob
 import itertools
 from progress.bar import Bar
 from time import time
+import sys
+from settings import FilterSettings
 
 
 
@@ -266,15 +268,25 @@ class ResultGeneration:
 
 
 def main():
-    data_folder = '../data/Runs001'
-    noise_file = '../data/noise/noise_data.h5'
-    run_number = 817
-    batch_size = 32
-    sup = 4
-    inf = -4
-    roc_grid = 100
+    filter_settings = FilterSettings()
+    data_folder = filter_settings.data_folder
+    noise_file = filter_settings.noise_file
+    run_number = filter_settings.run_number
+    batch_size = filter_settings.batch_size
+    sup = filter_settings.sup
+    inf = filter_settings.inf
+    roc_grid = filter_settings.roc_grid
+    w_range = filter_settings.w_range
+    filters = filter_settings.filters
+    #data_folder = '../data/Runs001'
+    #noise_file = '../data/noise/noise_data.h5'
+    #run_number = 817
+    #batch_size = 32
+    #sup = 4
+    #inf = -4
+    #roc_grid = 100
     data = ResultGeneration(data_folder, noise_file, run_number, batch_size, sup, inf, roc_grid)
-    w_range = [1, 3, 5, 7, 9, 11, 13]
+    w_range = [1, 3, 5, 7]
     filters = ['mean', 'gauss', 'median']
     data.calc_metrics(w_range, filters)
     data.result2csv()
