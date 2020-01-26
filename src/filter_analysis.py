@@ -76,7 +76,7 @@ def find_a_in_b(a, b):
     return c
 
 
-def roc_build(im_filt, im_no_filt, im_bin, im_std, bound_sup=2, bound_inf=0):
+def roc_build(im_filt, im_no_filt, im_bin, im_std, bound_sup=4, bound_inf=-4, grid=100):
     output = []
     output_en = []
     for i in range(0, im_filt.shape[2]):
@@ -85,7 +85,7 @@ def roc_build(im_filt, im_no_filt, im_bin, im_std, bound_sup=2, bound_inf=0):
         sg_ef = []
         bg_ef = []
         energy = []
-        for thr in np.linspace(bound_inf, bound_sup, 15):
+        for thr in np.linspace(bound_inf, bound_sup, grid):
             sxx, syy = np.where(im_filt[:, :, i] >= thr*im_std)
             s_pixels = find_a_in_b(np.stack((sxx, syy), axis=1),
                                    np.stack((sx, sy), axis=1))
@@ -93,10 +93,6 @@ def roc_build(im_filt, im_no_filt, im_bin, im_std, bound_sup=2, bound_inf=0):
             im_thr = im_filt[:, :, i] >= thr*im_std
             sg_ef.append(sum(im_thr[sx, sy] == 1) / len(sx))
             bg_ef.append(sum(im_thr[bx, by] == 0) / len(bx))
-        #for thr in np.linspace(bound_inf, bound_sup, bound_sup - bound_inf):
-        #    im_thr = im_filt[:, :, i] >= thr
-        #    sg_ef.append(sum(im_thr[sx, sy] == 1) / len(sx))
-        #    bg_ef.append(sum(im_thr[bx, by] == 0) / len(bx))
         output.append([sg_ef, bg_ef])
         output_en.append(energy)
     return np.array(output), np.array(output_en)
@@ -136,14 +132,14 @@ def get_energy(im_bin, im_desired):
 
 class ResultGeneration:
     # constructor
-    def __init__(self, folder, file_noise, run_number, batch_size, bound_sup, bound_inf, roi):
+    def __init__(self, folder, file_noise, run_number, batch_size, bound_sup, bound_inf, roc_grid):
         self.folder = folder  # folder where there are h5 files
         self.file_noise = file_noise  # folder that has the noise files
         self.run_number = run_number  # the run number for the noise
         self.batch_size = batch_size  # the batch size number
         self.bound_sup = bound_sup    # the upper bound to remove outliers
         self.bound_inf = bound_inf    # the lower bound to remove outliers
-        self.roi = np.sqrt(3)         # the cut value for roi
+        self.grid = roc_grid
         # outputs
         self.filters_name = []
         self.windows = []
@@ -236,7 +232,8 @@ class ResultGeneration:
                                                           im_bin,
                                                           std,
                                                           self.bound_sup,
-                                                          self.bound_inf)
+                                                          self.bound_inf,
+                                                          self.roc_grid)
                         if count == 0:
                             self.roc_values = roc_curv
                             self.energy_values = energy_curv
@@ -269,16 +266,16 @@ class ResultGeneration:
 
 
 def main():
-    folder = '../data/Runs001'
-    noise_folder = '../data/noise/noise_data.h5'
-    run = 817
+    data_folder = '../data/Runs001'
+    noise_file = '../data/noise/noise_data.h5'
+    run_number = 817
     batch_size = 32
-    sup = 2
-    inf = 0
-    roi = 3
-    data = ResultGeneration(folder, noise_folder, run, batch_size, sup, inf, roi)
-    w_range = [1,3,5,7,9,11,13]
-    filters = ['mean','gauss','median']
+    sup = 4
+    inf = -4
+    roc_grid = 100
+    data = ResultGeneration(data_folder, noise_file, run_number, batch_size, sup, inf, roc_grid)
+    w_range = [1, 3, 5, 7, 9, 11, 13]
+    filters = ['mean', 'gauss', 'median']
     data.calc_metrics(w_range, filters)
     data.result2csv()
 
