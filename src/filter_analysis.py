@@ -163,7 +163,7 @@ class ResultGeneration:
     def get_file_names(self):
         return glob.glob(self.folder + '/*.h5')  # get all h5 files on interest folder
 
-    def result2csv(self):
+    def result2csv(self, path):
         self.snr = list(itertools.chain.from_iterable(self.snr))
         self.windows = list(itertools.chain.from_iterable(self.windows))
         self.filters_name = list(itertools.chain.from_iterable(self.filters_name))
@@ -179,7 +179,7 @@ class ResultGeneration:
         results['ROCx'] = list(self.roc_values[:, 0, :])
         results['ROCy'] = list(self.roc_values[:, 1, :])
         results['Energy Estimated'] = list(self.energy_values)
-        results.to_csv(r'../data/result.csv', index=None, header=True)
+        results.to_csv(path+'.csv', index=None, header=True)
 
     # results for chosen metrics
     def calc_metrics(self, wrange, filters):
@@ -291,7 +291,8 @@ def main():
     w_range = filter_settings.w_range
     filters = filter_settings.filters
     data.calc_metrics(w_range, filters)
-    data.result2csv()
+    path = filter_settings.output_file_path + filter_settings.output_file_name
+    data.result2csv(path)
 
 
 if __name__ == "__main__":

@@ -10,3 +10,5 @@ class FilterSettings:
         self.roc_grid = 100
         self.w_range = [1, 3, 5, 7]
         self.filters = ['mean', 'gauss', 'median']
+        self.output_file_path = '../data/'
+        self.output_file_name = 'result_test'
