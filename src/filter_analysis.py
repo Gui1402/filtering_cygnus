@@ -141,7 +141,7 @@ class ResultGeneration:
         self.batch_size = batch_size  # the batch size number
         self.bound_sup = bound_sup    # the upper bound to remove outliers
         self.bound_inf = bound_inf    # the lower bound to remove outliers
-        self.grid = roc_grid
+        self.roc_grid = roc_grid
         # outputs
         self.filters_name = []
         self.windows = []
@@ -286,8 +286,10 @@ def main():
     #inf = -4
     #roc_grid = 100
     data = ResultGeneration(data_folder, noise_file, run_number, batch_size, sup, inf, roc_grid)
-    w_range = [1, 3, 5, 7]
-    filters = ['mean', 'gauss', 'median']
+   # w_range = [1, 3, 5, 7]
+   # filters = ['mean', 'gauss', 'median']
+    w_range = filter_settings.w_range
+    filters = filter_settings.filters
     data.calc_metrics(w_range, filters)
     data.result2csv()
 
