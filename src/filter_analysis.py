@@ -15,11 +15,22 @@ from settings import FilterSettings
 
 
 
+
 # Criacao de uma mascara gaussiana
 def gkern(kernlen, std):
     gkern1d = signal.gaussian(kernlen, std=std).reshape(kernlen, 1)
     gkern2d = np.outer(gkern1d, gkern1d)
     return gkern2d / np.sum(gkern2d)
+
+def unsupervised_wiener_apply(image, window):
+    psf = np.ones((window, window))/(window*window)
+    filter_settings = FilterSettings()
+    up = filter_settings.sup
+    low = filter_settings.inf
+    image_norm = (image-low)/(up-low)
+    filtered_image = restoration.unsupervised_wiener(image_norm, psf)
+    return (filtered_image*(up-low)) + low
+
 
 
 # criando uma funcao de filtragem multidimensional
@@ -40,13 +51,20 @@ def linear_filtering(img, maskSize, filtType):
         for i in range(0, img.shape[2]):
             deconvolved_img[:, :, i] = median(img[:, :, i], disk(maskSize))
             #deconvolved_img[:, :, i] = restoration.wiener(img[:, :, i], np.ones((1, 1)), maskSize/3)
+    elif filtType == 'unsupervised_wiener':
+        deconvolved_img = np.zeros_like(img)
+        for i in range(0, img.shape[2]):
+            deconvolved_img[:, :, i] = unsupervised_wiener_apply(img[:, :, i], maskSize)
+
+
+
     else:
         print("filter has not found")
         # se nenhum filtro for escolhido convolui com um impulso
         mask[1, 1, :] = 1
     mask[:, :, 0] = np.rot90(np.rot90(mask[:, :, 0]))
     # convolui com filtro rotacionado de 180 graus
-    if(filtType == 'median'):
+    if((filtType == 'median')|(filtType == 'unsupervised_wiener')):
         return deconvolved_img
     else:
         return convolve(img, mask, mode='wrap')
