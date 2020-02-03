@@ -27,9 +27,10 @@ def unsupervised_wiener_apply(image, window):
     filter_settings = FilterSettings()
     up = filter_settings.sup
     low = filter_settings.inf
-    image_norm = (image-low)/(up-low)
+    delta = up-low
+    image_norm = (image-low)/delta
     filtered_image = restoration.unsupervised_wiener(image_norm, psf)
-    return (filtered_image*(up-low)) + low
+    return filtered_image[0]*delta - low
 
 
 
@@ -55,7 +56,7 @@ def linear_filtering(img, maskSize, filtType):
         deconvolved_img = np.zeros_like(img)
         for i in range(0, img.shape[2]):
             deconvolved_img[:, :, i] = unsupervised_wiener_apply(img[:, :, i], maskSize)
-
+           # print(unsupervised_wiener_apply(img[:,:,i], maskSize)[2])
 
 
     else:

@@ -8,7 +8,7 @@ class FilterSettings:
         self.sup = 4
         self.inf = -4
         self.roc_grid = 100
-        self.w_range = [1, 3, 5 ,7]
-        self.filters = ['mean', 'gauss', 'median']
+        self.w_range = [1, 3, 5 ,7, 9, 11, 13]
+        self.filters = ['unsupervised_wiener']
         self.output_file_path = '../data/'
-        self.output_file_name = 'result_test'
+        self.output_file_name = 'result_test_wierner'
