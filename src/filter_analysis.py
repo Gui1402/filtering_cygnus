@@ -27,10 +27,14 @@ def unsupervised_wiener_apply(image, window):
     filter_settings = FilterSettings()
     up = filter_settings.sup
     low = filter_settings.inf
+    image[image >= up] = up
+    image[image <= low] = low
     delta = up-low
     image_norm = (image-low)/delta
-    filtered_image = restoration.unsupervised_wiener(image_norm, psf)
-    return filtered_image[0]*delta - low
+    filtered_image = restoration.unsupervised_wiener(image_norm, psf)[0]
+    filtered_image = (filtered_image * delta) - low
+    filtered_image = filtered_image - filtered_image.mean()
+    return filtered_image
 
 
 
@@ -51,14 +55,10 @@ def linear_filtering(img, maskSize, filtType):
         deconvolved_img = np.zeros_like(img)
         for i in range(0, img.shape[2]):
             deconvolved_img[:, :, i] = median(img[:, :, i], disk(maskSize))
-            #deconvolved_img[:, :, i] = restoration.wiener(img[:, :, i], np.ones((1, 1)), maskSize/3)
     elif filtType == 'unsupervised_wiener':
         deconvolved_img = np.zeros_like(img)
         for i in range(0, img.shape[2]):
             deconvolved_img[:, :, i] = unsupervised_wiener_apply(img[:, :, i], maskSize)
-           # print(unsupervised_wiener_apply(img[:,:,i], maskSize)[2])
-
-
     else:
         print("filter has not found")
         # se nenhum filtro for escolhido convolui com um impulso
