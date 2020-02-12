@@ -78,7 +78,6 @@ class ResultGeneration:
             n_images = size[0]
             bar = Bar('Loading', fill='@', suffix='%(percent)d%%')
             answer = {'Image_index': [], 'Filter_name': [], 'Filter_parameter': [], 'ROC': [], 'AUC': []}
-            count = 0
             for image_index in range(0, n_images):
                 a = time()
                 im_real = obj_x_train[image_index, :].reshape(im_dim, im_dim)
@@ -103,12 +102,11 @@ class ResultGeneration:
                         answer['Filter_parameter'].append(param)
                         answer['ROC'].append(roc)
                         answer['AUC'].append(auc)
-                count += 1
                 bar.next()
                 b = time()-a
-                remaining = (n_images-count)*b
+                remaining = (n_images-image_index)*b
                 print('\n Estimated time per image = ' + str(b))
-                print('\n Remaining (apx) = ' + str(round(remaining))+' minutes')
+                print('\n Remaining (apx) = ' + str(round(remaining/60))+' minutes')
 
             bar.finish()
         dumped = json.dumps(answer, cls=NumpyEncoder)
