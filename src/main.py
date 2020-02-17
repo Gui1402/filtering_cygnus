@@ -13,6 +13,7 @@ from keras.models import load_model
 from keras.optimizers import Adam
 from skimage.measure import compare_psnr, compare_ssim
 import models
+import h5py
 #from util import *
 
 ## Params
@@ -51,12 +52,15 @@ else:
 
       
 def load_train_data():
-    
+    x_train = h5py.File('../data/train_x.h5', 'r')['X']
+    y_train = h5py.File('../data/train_y.h5', 'r')['Y']
     logging.info('loading train data...')   
-    data = np.load(args.train_data)
-    logging.info('Size of train data: ({}, {}, {})'.format(data.shape[0],data.shape[1],data.shape[2]))
+
+    #data = np.load(args.train_data)
+
+    #logging.info('Size of train data: ({}, {}, {})'.format(data.shape[0],data.shape[1],data.shape[2]))
     
-    return data
+    return x_train, y_train
 
 def step_decay(epoch):
     
@@ -68,28 +72,49 @@ def step_decay(epoch):
     
     return lr
 
-def train_datagen(y_, batch_size=8):
+
+def get_h5_from_slices(obj_x, obj_y, indexes):
+
+    output_array_x = np.empty(shape=(0, obj_x.shape[1], obj_x.shape[2], 1))
+    output_array_y = np.empty(shape=(0, obj_y.shape[1], obj_y.shape[2], 1))
+    for i in indexes:
+        output_array_x = np.append(output_array_x, obj_x[i, ...].reshape(1, obj_x.shape[1], obj_x.shape[2], 1), axis=0)
+        output_array_y = np.append(output_array_y, obj_y[i, ...].reshape(1, obj_y.shape[1], obj_y.shape[2], 1), axis=0)
+    return output_array_x, output_array_y
+
+
+
+
+def train_datagen(x_, y_, batch_size=8):
     
     # y_ is the tensor of clean patches
     indices = list(range(y_.shape[0]))
     while(True):
         np.random.shuffle(indices)    # shuffle
         for i in range(0, len(indices), batch_size):
-            ge_batch_y = y_[indices[i:i+batch_size]]
-            noise =  np.random.normal(0, args.sigma/255.0, ge_batch_y.shape)    # noise
+            index_list = indices[i:i+batch_size]
+            ge_batch_x, ge_batch_y = get_h5_from_slices(x_, y_, index_list)
+            ge_batch_x = np.clip(ge_batch_x, 74, 116)
+            ge_batch_y = np.clip(ge_batch_y, 74, 116)
+            ge_batch_x = (ge_batch_x-74)/(116-74)
+            ge_batch_y = (ge_batch_y - 74) / (116 - 74)
+            #ge_batch_y = y_[indices[i:i+batch_size]]
+            #noise =  np.random.normal(0, args.sigma/255.0, ge_batch_y.shape)    # noise
             #noise =  K.random_normal(ge_batch_y.shape, mean=0, stddev=args.sigma/255.0)
-            ge_batch_x = ge_batch_y + noise  # input image = clean image + noise
+            #ge_batch_x = ge_batch_y + noise  # input image = clean image + noise
             yield ge_batch_x, ge_batch_y
         
 def train():
     
-    data = load_train_data()
-    data = data.reshape((data.shape[0],data.shape[1],data.shape[2],1))
-    data = data.astype('float32')/255.0
+    data_x, data_y = load_train_data()
+    #data = data.reshape((data.shape[0], data.shape[1], data.shape[2], 1))
+    #data = data.astype('float32')/255.0
     # model selection
-    if args.pretrain:   model = load_model(args.pretrain, compile=False)
+    if args.pretrain:
+        model = load_model(args.pretrain, compile=False)
     else:   
-        if args.model == 'DnCNN': model = models.DnCNN()
+        if args.model == 'DnCNN':
+            model = models.DnCNN()
     # compile the model
     model.compile(optimizer=Adam(), loss=['mse'])
     
@@ -99,8 +124,8 @@ def train():
     csv_logger = CSVLogger(save_dir+'/log.csv', append=True, separator=',')
     lr = LearningRateScheduler(step_decay)
     # train 
-    history = model.fit_generator(train_datagen(data, batch_size=args.batch_size),
-                    steps_per_epoch=len(data)//args.batch_size, epochs=args.epoch, verbose=1, 
+    history = model.fit_generator(train_datagen(data_x, data_y, batch_size=args.batch_size),
+                    steps_per_epoch=len(data_x)//args.batch_size, epochs=args.epoch, verbose=1,
                     callbacks=[ckpt, csv_logger, lr])
     
     return model
