@@ -22,7 +22,7 @@ parser.add_argument('--model', default='DnCNN', type=str, help='choose a type of
 parser.add_argument('--batch_size', default=128, type=int, help='batch size')
 parser.add_argument('--train_data', default='./data/npy_data/clean_patches.npy', type=str, help='path of train data')
 parser.add_argument('--test_dir', default='./data/Test/Set68', type=str, help='directory of test dataset')
-parser.add_argument('--sigma', default=25, type=int, help='noise level')
+parser.add_argument('--run', default=817, type=int, help='run number')
 parser.add_argument('--epoch', default=50, type=int, help='number of train epoches')
 parser.add_argument('--lr', default=1e-3, type=float, help='initial learning rate for Adam')
 parser.add_argument('--save_every', default=5, type=int, help='save model at every x epoches')
@@ -31,7 +31,7 @@ parser.add_argument('--only_test', default=False, type=bool, help='train and tes
 args = parser.parse_args()
 
 if not args.only_test:
-    save_dir = './snapshot/save_'+ args.model + '_' + 'sigma' + str(args.sigma) + '_' + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) + '/'
+    save_dir = '../data/snapshot/save_' + args.model + '_' + 'run' + str(args.run) + '_' + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) + '/'
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     # log
@@ -65,7 +65,7 @@ def load_train_data():
 def step_decay(epoch):
     
     initial_lr = args.lr
-    if epoch<50:
+    if epoch < 50:
         lr = initial_lr
     else:
         lr = initial_lr/10
@@ -83,10 +83,7 @@ def get_h5_from_slices(obj_x, obj_y, indexes):
     return output_array_x, output_array_y
 
 
-
-
 def train_datagen(x_, y_, batch_size=8):
-    
     # y_ is the tensor of clean patches
     indices = list(range(y_.shape[0]))
     while(True):
@@ -104,8 +101,8 @@ def train_datagen(x_, y_, batch_size=8):
             #ge_batch_x = ge_batch_y + noise  # input image = clean image + noise
             yield ge_batch_x, ge_batch_y
         
+
 def train():
-    
     data_x, data_y = load_train_data()
     #data = data.reshape((data.shape[0], data.shape[1], data.shape[2], 1))
     #data = data.astype('float32')/255.0
@@ -120,7 +117,7 @@ def train():
     
     # use call back functions
     ckpt = ModelCheckpoint(save_dir+'/model_{epoch:02d}.h5', monitor='val_loss', 
-                    verbose=0, period=args.save_every)
+                           verbose=0, period=args.save_every)
     csv_logger = CSVLogger(save_dir+'/log.csv', append=True, separator=',')
     lr = LearningRateScheduler(step_decay)
     # train 
@@ -172,7 +169,8 @@ def test(model):
     print('Average PSNR = {0:.2f}, SSIM = {1:.2f}'.format(psnr_avg, ssim_avg))
     
     pd.DataFrame({'name':np.array(name), 'psnr':np.array(psnr), 'ssim':np.array(ssim)}).to_csv(out_dir+'/metrics.csv', index=True)
-    
+
+
 if __name__ == '__main__':   
     
     if args.only_test:
@@ -180,5 +178,5 @@ if __name__ == '__main__':
         test(model)
     else:
         model = train()
-        test(model)       
+        #test(model)
     
