@@ -22,7 +22,7 @@ parser.add_argument('--test_dir', default='./data/Test/Set68', type=str, help='d
 parser.add_argument('--run', default=817, type=int, help='run number')
 parser.add_argument('--epoch', default=50, type=int, help='number of train epoches')
 parser.add_argument('--lr', default=1e-3, type=float, help='initial learning rate for Adam')
-parser.add_argument('--save_every', default=5, type=int, help='save model at every x epoches')
+parser.add_argument('--save_every', default=1, type=int, help='save model at every x epoches')
 parser.add_argument('--pretrain', default=None, type=str, help='path of pre-trained model')
 parser.add_argument('--only_test', default=False, type=bool, help='train and test or only test')
 args = parser.parse_args()
