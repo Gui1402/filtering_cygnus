@@ -46,6 +46,10 @@ class CnnDataGen:
         self.obj_y_train = []
 
     def get_train_files(self, idx_min, idx_max):
+        """ Get files to create train database
+            Input: Range of indexes in images list : [idx_min, idx_max]
+            Output: Convert tha selected range into an anrray
+        """""
         file_names = glob.glob(self.file_dir + '/*.h5')
         file_name = file_names[0]
         f = h5py.File(file_name, 'r')
@@ -70,11 +74,17 @@ class CnnDataGen:
         return im_rebined
 
     def get_pedestal(self, run_number):
+        """ Get pedestal images
+            Input: Run number of desired pedestal (only 817,818,819 and 820)
+            Output: A pedmap image """""
         fn = h5py.File(self.file_noise, 'r')  # read file noise
         ped = fn['mean']  # get pedestal
         return ped[:, :, 820 - run_number]
 
     def gen_patches(self, index):
+        """ Gen patches of images from an image
+            Input: image index (from image database)
+            Output: a list of images patches (truth and noised) """""
         img_in = self.obj_x_train[index, :]
         img_out = self.obj_y_train[index, :]
         dim = int(np.sqrt(len(img_out)))
@@ -88,8 +98,6 @@ class CnnDataGen:
         patches_x = []
         log = []
         for s in scales:
-            make_data = True
-            count_pos = 0
             h_scaled, w_scaled = int(h * s), int(w * s)
             img_out_scaled = cv2.resize(img_out, (h_scaled, w_scaled), interpolation=cv2.INTER_CUBIC)
             img_in_scaled = cv2.resize(img_in, (h_scaled, w_scaled), interpolation=cv2.INTER_CUBIC)
@@ -115,6 +123,9 @@ class CnnDataGen:
         return patches_y, patches_x, log
 
     def file_gen(self):
+        """ Create a train database file
+            Input: 
+            Output: a h5 file with train database """""
         count_data = 0
         idx = list(range(0, self.n_images, self.batch_size))
         idy = list(range(self.batch_size, self.n_images, self.batch_size))
