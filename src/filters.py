@@ -49,4 +49,31 @@ class DenoisingFilters:
         filtered_image = filtered_image - filtered_image.mean()
         return filtered_image
 
+    def bilateral_filter(self, win_size, sigma_r, sigma_d):
+        image_norm, delta, low = self.standardize()
+        filtered_image = restoration.denoise_bilateral(image_norm,
+                                                       win_size=win_size,
+                                                       sigma_color=sigma_r,
+                                                       sigma_spatial=sigma_d)
+        filtered_image = (filtered_image * delta) - low
+        filtered_image = filtered_image - filtered_image.mean()
+        return filtered_image
+
+    def nlmeans_filter(self, patch_size, patch_distance):
+        image_norm, delta, low = self.standardize()
+        filtered_image = restoration.denoise_nl_means(image_norm,
+                                                      patch_size=patch_size,
+                                                      patch_distance=patch_distance)
+        filtered_image = (filtered_image * delta) - low
+        filtered_image = filtered_image - filtered_image.mean()
+        return filtered_image
+
+    ## bilateral
+    # win_size = [3, 5, 7,9]
+    # sigma_r = [1,..,10]
+    # sigma_d = [1,...,10]
+
+    ## nl_means
+    #patch_size [1, 3, 5,11]
+    #patch_distance  [1,3,..5,..,11]
 
