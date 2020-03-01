@@ -95,6 +95,10 @@ def train():
     else:
         if args.model == 'DnCNN':
             model = models.DnCNN()
+        elif args.model == 'BRDNet':
+            model = models.BRDNet()
+        else:
+            print('Invalid model')
     # compile the model
     model.compile(optimizer=Adam(), loss=['mse'])
     # use call back functions
