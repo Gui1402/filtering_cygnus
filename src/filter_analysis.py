@@ -93,6 +93,8 @@ class ResultGeneration:
                     func = getattr(DenoisingFilters, filter_name)
                     params = filters[key]
                     for param in params:
+                        if param is 'lut':
+                            param = image_index
                         image_filtered = func(denoising_filter, *param)
                         metrics = Metrics(im_no_pad, image_filtered, im_bin, std)
                         roc = metrics.roc_build()[0, :, :]

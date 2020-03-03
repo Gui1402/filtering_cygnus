@@ -4,6 +4,7 @@ from skimage.morphology import square
 import numpy as np
 import pybind_bm3d as m
 from settings import FilterSettings
+import h5py
 
 
 class DenoisingFilters:
@@ -65,12 +66,15 @@ class DenoisingFilters:
         filtered_image = filtered_image - filtered_image.mean()
         return filtered_image
 
-    def bm3D(self, sigma):
+    def bm3D_filter(self, sigma):
         filter_settings = FilterSettings()
         img_satured = 99 + np.clip(self._image_input, filter_settings.inf, filter_settings.sup)
         filtered_img = m.bm3d(img_satured, sigma) - 99
         return filtered_img
 
-    def FC_AIDE(self, index):
+    def FCAIDE_filter(self, index):
+        obj = h5py.File('../data/FC-AIDE/merged', 'r')
+        data = obj['result']
+        return data[index, :].reshape(512, 512)
         print("none")
 
