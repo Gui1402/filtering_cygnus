@@ -5,15 +5,16 @@ astroid==2.3.3
 attrs==19.3.0
 Babel==2.7.0
 backcall==0.1.0
-bleach==3.1.0
+bleach==1.5.0
 cachetools==3.1.1
-certifi==2019.9.11
+certifi==2019.11.28
 cffi==1.13.2
 chardet==3.0.4
 Click==7.0
 cloudpickle==1.2.2
 cryptography==2.8
 cycler==0.10.0
+Cython==0.29.15
 dask==2.10.1
 decorator==4.4.1
 defusedxml==0.6.0
@@ -21,6 +22,7 @@ dill==0.3.1.1
 distributed==2.10.0
 docutils==0.15.2
 entrypoints==0.3
+enum34==1.1.6
 gast==0.2.2
 gcc7==0.0.7
 google-auth==1.7.0
@@ -29,6 +31,7 @@ google-pasta==0.1.8
 grpcio==1.25.0
 h5py==2.10.0
 HeapDict==1.0.1
+html5lib==0.9999999
 idna==2.8
 imageio==2.6.1
 imagesize==1.1.0
@@ -44,7 +47,7 @@ joblib==0.14.0
 jsonschema==3.2.0
 jupyter-client==5.3.4
 jupyter-core==4.6.1
-Keras==2.3.1
+Keras==2.1.5
 Keras-Applications==1.0.8
 Keras-Preprocessing==1.1.0
 keyring==19.2.0
@@ -85,6 +88,8 @@ psutil==5.6.7
 ptyprocess==0.6.0
 pyasn1==0.4.7
 pyasn1-modules==0.2.7
+pybind-bm3d==0.1.0
+pybind11==2.4.3
 pycodestyle==2.5.0
 pycparser==2.19
 pyflakes==2.1.1
@@ -127,8 +132,9 @@ spyder-kernels==0.5.2
 tables==3.6.1
 tblib==1.6.0
 tensorboard==2.0.1
-tensorflow==2.0.0
+tensorflow==1.4.0
 tensorflow-estimator==2.0.1
+tensorflow-tensorboard==0.4.0
 termcolor==1.1.0
 testpath==0.4.4
 Theano==1.0.4

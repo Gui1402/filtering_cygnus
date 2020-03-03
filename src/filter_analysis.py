@@ -94,7 +94,7 @@ class ResultGeneration:
                     params = filters[key]
                     for param in params:
                         image_filtered = func(denoising_filter, *param)
-                        metrics = Metrics(im_no_pad, image_filtered, im_truth, std)
+                        metrics = Metrics(im_no_pad, image_filtered, im_bin, std)
                         roc = metrics.roc_build()[0, :, :]
                         auc = metrics.calc_auc(roc)
                         answer['Image_index'].append(image_index)

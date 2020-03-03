@@ -2,11 +2,8 @@ from skimage import filters
 from skimage import restoration
 from skimage.morphology import square
 import numpy as np
+import pybind_bm3d as m
 from settings import FilterSettings
-import cv2
-
-
-
 
 
 class DenoisingFilters:
@@ -68,12 +65,12 @@ class DenoisingFilters:
         filtered_image = filtered_image - filtered_image.mean()
         return filtered_image
 
-    ## bilateral
-    # win_size = [3, 5, 7,9]
-    # sigma_r = [1,..,10]
-    # sigma_d = [1,...,10]
+    def bm3D(self, sigma):
+        filter_settings = FilterSettings()
+        img_satured = 99 + np.clip(self._image_input, filter_settings.inf, filter_settings.sup)
+        filtered_img = m.bm3d(img_satured, sigma) - 99
+        return filtered_img
 
-    ## nl_means
-    #patch_size [1, 3, 5,11]
-    #patch_distance  [1,3,..5,..,11]
+    def FC_AIDE(self, index):
+        print("none")
 
