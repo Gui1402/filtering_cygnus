@@ -5,7 +5,7 @@ import numpy as np
 import pybind_bm3d as m
 from settings import FilterSettings
 import h5py
-
+from scipy import ndimage
 
 class DenoisingFilters:
 
@@ -28,12 +28,8 @@ class DenoisingFilters:
         return filters.gaussian(self._image_input, sigma=sigma)
 
     def mean_filter(self, window_size):
-        selem = square(window_size)
-        image_norm, delta, low = self.standardize()
-        filtered_image = filters.rank.mean(image_norm, selem=selem)
-        filtered_image = (filtered_image * delta) - low
-        filtered_image = filtered_image - filtered_image.mean()
-        return filtered_image
+        mask = np.ones((window_size, window_size))/(window_size**2)
+        return ndimage.filters.convolve(self._image_input, mask)
 
     def median_filter(self, window_size):
         selem = square(window_size)
@@ -73,8 +69,7 @@ class DenoisingFilters:
         return filtered_img
 
     def FCAIDE_filter(self, index):
-        obj = h5py.File('../data/FC-AIDE/merged', 'r')
+        obj = h5py.File('../data/FC-AIDE/merged.h5', 'r')
         data = obj['result']
         return data[index, :].reshape(512, 512)
-        print("none")
 

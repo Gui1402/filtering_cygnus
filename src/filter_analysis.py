@@ -77,7 +77,8 @@ class ResultGeneration:
             im_dim = int(np.sqrt(size[1]))
             n_images = size[0]
             bar = Bar('Loading', fill='@', suffix='%(percent)d%%')
-            answer = {'Image_index': [], 'Filter_name': [], 'Filter_parameter': [], 'ROC': [], 'AUC': []}
+            answer = {'Image_index': [], 'Filter_name': [],
+                      'Filter_parameter': [], 'ROC': [], 'AUC': [], 'Threshold': []}
             for image_index in range(0, n_images):
                 a = time()
                 im_real = obj_x_train[image_index, :].reshape(im_dim, im_dim)
@@ -94,16 +95,18 @@ class ResultGeneration:
                     params = filters[key]
                     for param in params:
                         if param is 'lut':
-                            param = image_index
+                            param = [image_index]
                         image_filtered = func(denoising_filter, *param)
                         metrics = Metrics(im_no_pad, image_filtered, im_bin, std)
-                        roc = metrics.roc_build()[0, :, :]
-                        auc = metrics.calc_auc(roc)
-                        answer['Image_index'].append(image_index)
-                        answer['Filter_name'].append(key)
-                        answer['Filter_parameter'].append(param)
-                        answer['ROC'].append(roc)
-                        answer['AUC'].append(auc)
+                        for threshold_method in ['local', 'global']:
+                            roc = metrics.roc_build(method=threshold_method)[0, :, :]
+                            auc = metrics.calc_auc(roc)
+                            answer['Image_index'].append(image_index)
+                            answer['Filter_name'].append(key)
+                            answer['Filter_parameter'].append(param)
+                            answer['ROC'].append(roc)
+                            answer['AUC'].append(auc)
+                            answer['Threshold'].append(threshold_method)
                 bar.next()
                 b = time()-a
                 remaining = (n_images-image_index)*b

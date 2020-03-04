@@ -21,10 +21,16 @@ class Metrics:
         c = c.view(a.dtype).reshape(-1, ncols)
         return c
 
-    def roc_build(self):
+    def roc_build(self, method='local'):
         fs = FilterSettings()
-        bound_sup = fs.sup
-        bound_inf = fs.inf
+        if method == 'local':
+            bound_sup = fs.sup
+            bound_inf = fs.inf
+            px_thr = self._image_std
+        else:
+            bound_sup = self._image_output.mean() + 4*self._image_output.std()
+            bound_inf = self._image_output.mean() - 4*self._image_output.std()
+            px_thr = np.ones_like(self._image_output)
         grid = fs.roc_grid
         output = []
         sx, sy = np.where(self._image_truth == 1)
@@ -32,10 +38,10 @@ class Metrics:
         sg_ef = []
         bg_ef = []
         for thr in np.linspace(bound_inf, bound_sup, grid):
-            sxx, syy = np.where(self._image_output >= thr*self._image_std)
-            s_pixels = self.find_a_in_b(np.stack((sxx, syy), axis=1),
-                                        np.stack((sx, sy), axis=1))
-            im_thr = self._image_output >= thr*self._image_std
+            #sxx, syy = np.where(self._image_output >= thr*px_thr)
+            #s_pixels = self.find_a_in_b(np.stack((sxx, syy), axis=1),
+            #                            np.stack((sx, sy), axis=1))
+            im_thr = self._image_output >= thr*px_thr
             sg_ef.append(sum(im_thr[sx, sy] == 1) / len(sx))
             bg_ef.append(sum(im_thr[bx, by] == 0) / len(bx))
         output.append([sg_ef, bg_ef])
