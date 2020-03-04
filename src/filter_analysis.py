@@ -68,6 +68,7 @@ class ResultGeneration:
         full_files = self.get_file_names()
         ped, std = self.get_pedestal()
         std = self.im_rebin(std, rebin_factor=4)
+        answer = {'Image_index': [], 'Filter_name': [], 'Filter_parameter': [], 'ROC': [], 'AUC': [], 'Threshold': []}
         for file_name in full_files:
             f = h5py.File(file_name, 'r')
             print("Start Analysis")
@@ -77,8 +78,6 @@ class ResultGeneration:
             im_dim = int(np.sqrt(size[1]))
             n_images = size[0]
             bar = Bar('Loading', fill='@', suffix='%(percent)d%%')
-            answer = {'Image_index': [], 'Filter_name': [],
-                      'Filter_parameter': [], 'ROC': [], 'AUC': [], 'Threshold': []}
             for image_index in range(0, n_images):
                 a = time()
                 im_real = obj_x_train[image_index, :].reshape(im_dim, im_dim)
@@ -114,6 +113,7 @@ class ResultGeneration:
                 print('\n Remaining (apx) = ' + str(round(remaining/60))+' minutes')
 
             bar.finish()
+
         dumped = json.dumps(answer, cls=NumpyEncoder)
         with open(path+'.json', 'w') as f:
             json.dump(dumped, f)
