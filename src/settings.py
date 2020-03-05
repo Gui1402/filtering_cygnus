@@ -8,7 +8,7 @@ class FilterSettings:
         self.run_number = 817
         self.sup = 16
         self.inf = -26
-        self.roc_grid = 100
+        self.roc_grid = 120
         self.filters = {'bilateral': [[i, j, k] for i in range(3, 11, 2) for j in range(1, 10, 2) for k in range(1, 10, 2)],
                         'nlmeans': [[i, j] for i in range(1, 13, 2) for j in range(1, 13, 2)],
                         'gaussian': [[3], [5], [7]],

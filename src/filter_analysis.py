@@ -68,7 +68,7 @@ class ResultGeneration:
         full_files = self.get_file_names()
         ped, std = self.get_pedestal()
         std = self.im_rebin(std, rebin_factor=4)
-        answer = {'Image_index': [], 'Filter_name': [], 'Filter_parameter': [], 'ROC': [], 'AUC': [], 'Threshold': []}
+        answer = {'Image_index': [], 'Filter_name': [], 'Filter_parameter': [], 'ROC': {'array': [], 'method': []}}
         for file_name in full_files:
             f = h5py.File(file_name, 'r')
             print("Start Analysis")
@@ -88,6 +88,8 @@ class ResultGeneration:
                 im_no_pad = im_real - im_ped
                 im_bin = im_truth > 0
                 denoising_filter = DenoisingFilters(im_no_pad)
+                image_batch = np.empty([0, im_no_pad.shape[0], im_no_pad.shape[1]])
+                bar2 = Bar('Filtering image ' + str(image_index), fill='#', suffix='%(percent)d%%')
                 for key in filters:
                     filter_name = key + '_filter'
                     func = getattr(DenoisingFilters, filter_name)
@@ -96,16 +98,18 @@ class ResultGeneration:
                         if param is 'lut':
                             param = [image_index]
                         image_filtered = func(denoising_filter, *param)
-                        metrics = Metrics(im_no_pad, image_filtered, im_bin, std)
-                        for threshold_method in ['local', 'global']:
-                            roc = metrics.roc_build(method=threshold_method)[0, :, :]
-                            auc = metrics.calc_auc(roc)
-                            answer['Image_index'].append(image_index)
-                            answer['Filter_name'].append(key)
-                            answer['Filter_parameter'].append(param)
-                            answer['ROC'].append(roc)
-                            answer['AUC'].append(auc)
-                            answer['Threshold'].append(threshold_method)
+                        image_filtered_standardized = (image_filtered-image_filtered.mean())/image_filtered.std()
+                        image_batch = np.append(image_batch, image_filtered_standardized.reshape((1,)+image_filtered.shape), axis=0)
+                        answer['Filter_name'].append(key)
+                        answer['Filter_parameter'].append(param)
+                        bar2.next()
+                bar2.finish()
+                metrics = Metrics(im_no_pad, image_batch, im_bin, std)
+                for threshold_method in ['local', 'global']:
+                    roc = metrics.roc_build(method=threshold_method)
+                    answer['ROC']['array'].append(roc)
+                    answer['ROC']['method'].append(threshold_method)
+                answer['Image_index'].append(image_index)
                 bar.next()
                 b = time()-a
                 remaining = (n_images-image_index)*b
