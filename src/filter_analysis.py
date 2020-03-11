@@ -9,7 +9,7 @@ from settings import FilterSettings
 from filters import DenoisingFilters
 from metrics import Metrics
 import json
-
+from time import time
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -68,7 +68,10 @@ class ResultGeneration:
         full_files = self.get_file_names()
         ped, std = self.get_pedestal()
         std = self.im_rebin(std, rebin_factor=4)
-        answer = {'Image_index': [], 'Filter_name': [], 'Filter_parameter': [], 'ROC': {'array': [], 'method': []}}
+        answer = {'Image_index': [], 'Filter_name': [], 'count': [], 'Filter_parameter': [], 'time': [],
+                  'ROC': {'array': [],
+                          'energy': [],
+                          'method': []}}
         for file_name in full_files:
             f = h5py.File(file_name, 'r')
             print("Start Analysis")
@@ -87,6 +90,7 @@ class ResultGeneration:
                 im_ped = self.im_rebin(ped, rebin_factor=4)
                 im_no_pad = im_real - im_ped
                 im_bin = im_truth > 0
+                answer['count'].append(im_bin.sum())
                 denoising_filter = DenoisingFilters(im_no_pad)
                 image_batch = np.empty([0, im_no_pad.shape[0], im_no_pad.shape[1]])
                 bar2 = Bar('Filtering image ' + str(image_index), fill='#', suffix='%(percent)d%%')
@@ -97,7 +101,9 @@ class ResultGeneration:
                     for param in params:
                         if param is 'lut':
                             param = [image_index]
+                        t1 = time()
                         image_filtered = func(denoising_filter, *param)
+                        answer['time'].append(time()-t1)
                         image_filtered_standardized = (image_filtered-image_filtered.mean())/image_filtered.std()
                         image_batch = np.append(image_batch, image_filtered_standardized.reshape((1,)+image_filtered.shape), axis=0)
                         answer['Filter_name'].append(key)
@@ -106,8 +112,9 @@ class ResultGeneration:
                 bar2.finish()
                 metrics = Metrics(im_no_pad, image_batch, im_bin, std)
                 for threshold_method in ['local', 'global']:
-                    roc = metrics.roc_build(method=threshold_method)
+                    roc, energy = metrics.roc_build(method=threshold_method)
                     answer['ROC']['array'].append(roc)
+                    answer['ROC']['energy'].append(energy)
                     answer['ROC']['method'].append(threshold_method)
                 answer['Image_index'].append(image_index)
                 bar.next()

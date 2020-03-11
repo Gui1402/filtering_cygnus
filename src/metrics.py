@@ -33,43 +33,25 @@ class Metrics:
         step = (bound_sup - bound_inf) / grid
         sg_ef = []
         bg_ef = []
+        energy = []
         xs, ys = np.where(self._image_truth == 1)
         xb, yb = np.where(self._image_truth == 0)
+        energy_truth = self.energy_calc(xs, ys)
         for i in range(0, grid + 1):
             thr = bound_inf + i * step
             thr = thr.reshape(-1, 1, 1)
             result = self._image_output > (thr * px_thr)
+            intersection = result[:, xs, ys]
+            energy_temp = []
+            for image_n in range(intersection.shape[0]):
+                xi, yi = xs[intersection[image_n, :]], ys[intersection[image_n, :]]
+                energy_temp.append(energy_truth-self.energy_calc(xi, yi))
+            energy.append(energy_temp)
             signal_pixels_eff = result[:, xs, ys].sum(axis=1) / len(xs)
             background_pixels_eff = (result[:, xb, yb] == False).sum(axis=1) / len(xb)
             sg_ef.append(signal_pixels_eff)
             bg_ef.append(background_pixels_eff)
-        return np.array(sg_ef), np.array(bg_ef)
-
-    # def roc_build(self, method='local'):
-    #     fs = FilterSettings()
-    #     if method == 'local':
-    #         bound_sup = fs.sup
-    #         bound_inf = fs.inf
-    #         px_thr = self._image_std
-    #     else:
-    #         bound_sup = self._image_output.mean() + 4*self._image_output.std()
-    #         bound_inf = self._image_output.mean() - 4*self._image_output.std()
-    #         px_thr = np.ones_like(self._image_output)
-    #     grid = fs.roc_grid
-    #     output = []
-    #     sx, sy = np.where(self._image_truth == 1)
-    #     bx, by = np.where(self._image_truth == 0)
-    #     sg_ef = []
-    #     bg_ef = []
-    #     for thr in np.linspace(bound_inf, bound_sup, grid):
-    #         #sxx, syy = np.where(self._image_output >= thr*px_thr)
-    #         #s_pixels = self.find_a_in_b(np.stack((sxx, syy), axis=1),
-    #         #                            np.stack((sx, sy), axis=1))
-    #         im_thr = self._image_output >= thr*px_thr
-    #         sg_ef.append(sum(im_thr[sx, sy] == 1) / len(sx))
-    #         bg_ef.append(sum(im_thr[bx, by] == 0) / len(bx))
-    #     output.append([sg_ef, bg_ef])
-    #     return np.array(output)
+        return (np.array(sg_ef), np.array(bg_ef)), np.array(energy)
 
     def calc_auc(self, roc):
         x = roc[0, :]
@@ -87,6 +69,7 @@ class Metrics:
             en_sg = sum(self._image_output[isx, isy, index] ** 2)
             en_bg = sum(self._image_output[ibx, iby, index] ** 2)
             output.append(en_sg / en_bg)
-
         return output
 
+    def energy_calc(self, xx, yy):
+        return self._image_input[xx, yy].sum()
