@@ -6,6 +6,10 @@ import pybind_bm3d as m
 from settings import FilterSettings
 import h5py
 from scipy import ndimage
+import sys
+sys.path.append('fcdnn/')
+sys.path.append('/fcdnn')
+from core.test_blind_ft import Fine_tuning as test_ft
 
 class DenoisingFilters:
 
@@ -68,8 +72,11 @@ class DenoisingFilters:
         filtered_img = m.bm3d(img_satured, sigma) - 99
         return filtered_img
 
-    def FCAIDE_filter(self, index):
-        obj = h5py.File('../data/FC-AIDE/merged.h5', 'r')
-        data = obj['result']
-        return data[index, :].reshape(512, 512)
+    def FCAIDE_filter(self, sigma):
+        t_ft = test_ft(self._image_input, self._image_input, sigma)
+        return t_ft.fine_tuning()
+
+        #obj = h5py.File('../data/FC-AIDE/merged.h5', 'r')
+        #data = obj['result']
+        #return data[index, :].reshape(512, 512)
 

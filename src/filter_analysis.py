@@ -90,7 +90,7 @@ class ResultGeneration:
                 im_ped = self.im_rebin(ped, rebin_factor=4)
                 im_no_pad = im_real - im_ped
                 im_bin = im_truth > 0
-                answer['count'].append(im_bin.sum())
+                answer['count'].append(str(im_bin.sum()))
                 denoising_filter = DenoisingFilters(im_no_pad)
                 image_batch = np.empty([0, im_no_pad.shape[0], im_no_pad.shape[1]])
                 bar2 = Bar('Filtering image ' + str(image_index), fill='#', suffix='%(percent)d%%')
@@ -103,7 +103,7 @@ class ResultGeneration:
                             param = [image_index]
                         t1 = time()
                         image_filtered = func(denoising_filter, *param)
-                        answer['time'].append(time()-t1)
+                        answer['time'].append(str(time()-t1))
                         image_filtered_standardized = (image_filtered-image_filtered.mean())/image_filtered.std()
                         image_batch = np.append(image_batch, image_filtered_standardized.reshape((1,)+image_filtered.shape), axis=0)
                         answer['Filter_name'].append(key)

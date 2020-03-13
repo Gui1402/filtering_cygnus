@@ -16,7 +16,7 @@ class FilterSettings:
                         'median': [[3], [5], [7]],
                         'wiener': [[1], [3], [5]],
                         'bm3D': [[1], [2], [3], [4], [5]],
-                        'FCAIDE': ['lut']
+                        'FCAIDE': [[1], [2], [3], [4], [5]]
                         }
         self.output_file_path = '../data/'
-        self.output_file_name = 'all_filters'
+        self.output_file_name = 'result_032020'
