@@ -10,6 +10,7 @@ from filters import DenoisingFilters
 from metrics import Metrics
 import json
 from time import time
+from hwcounter import Timer, count, count_end
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -101,9 +102,9 @@ class ResultGeneration:
                     for param in params:
                         if param is 'lut':
                             param = [image_index]
-                        t1 = time()
-                        image_filtered = func(denoising_filter, *param)
-                        answer['time'].append(str(time()-t1))
+                        with Timer() as t1:
+                            image_filtered = func(denoising_filter, *param)
+                        answer['time'].append(str(t1.cycles))
                         image_filtered_standardized = (image_filtered-image_filtered.mean())/image_filtered.std()
                         image_batch = np.append(image_batch, image_filtered_standardized.reshape((1,)+image_filtered.shape), axis=0)
                         answer['Filter_name'].append(key)

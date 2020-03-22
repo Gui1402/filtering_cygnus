@@ -7,6 +7,7 @@ from settings import FilterSettings
 import h5py
 from scipy import ndimage
 import sys
+from dn_cnn_test import NnTest
 sys.path.append('fcdnn/')
 sys.path.append('/fcdnn')
 from core.test_blind_ft import Fine_tuning as test_ft
@@ -79,4 +80,14 @@ class DenoisingFilters:
         #obj = h5py.File('../data/FC-AIDE/merged.h5', 'r')
         #data = obj['result']
         #return data[index, :].reshape(512, 512)
+
+    def DnCNN_filter(self, path):
+        image_norm, delta, low = self.standardize()
+        nn_test = NnTest(image_norm, path)
+        filtered_image = nn_test.test()
+        filtered_image = (filtered_image * delta) - low
+        filtered_image = filtered_image - filtered_image.mean()
+        return filtered_image
+
+
 
