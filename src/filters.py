@@ -73,13 +73,13 @@ class DenoisingFilters:
         filtered_img = m.bm3d(img_satured, sigma) - 99
         return filtered_img
 
-    def FCAIDE_filter(self, sigma):
-        t_ft = test_ft(self._image_input, self._image_input, sigma)
-        return t_ft.fine_tuning()
+    def FCAIDE_filter(self, index):
+        #t_ft = test_ft(self._image_input, self._image_input, sigma)
+        #return t_ft.fine_tuning()
 
-        #obj = h5py.File('../data/FC-AIDE/merged.h5', 'r')
-        #data = obj['result']
-        #return data[index, :].reshape(512, 512)
+        obj = h5py.File('../data/FC-AIDE/merged.h5', 'r')
+        data = obj['result']
+        return data[index, :].reshape(512, 512)
 
     def DnCNN_filter(self, path):
         image_norm, delta, low = self.standardize()

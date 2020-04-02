@@ -1,5 +1,44 @@
 import numpy as np
 from settings import FilterSettings
+from skimage.morphology import skeletonize
+from skimage.morphology import label
+from skimage.measure import regionprops, regionprops_table
+from skimage.filters import laplace
+from skimage.measure import find_contours
+from skimage.transform import rotate
+from skimage.morphology import disk
+
+
+def cluster_length(image_cluster):
+    skeleton_lee = skeletonize(image_cluster, method='lee') / 255
+    return skeleton_lee.sum()
+
+
+def cluster_features(img_clusters):
+    clusters_info = regionprops(img_clusters)
+    cluster_table = {"xc": [],
+                     "yc": [],
+                     "length": [],
+                     "width": [],
+                     "area": [],
+                     "angle": [],
+                     "perimeter": []}
+    output_cluster = []
+    for cluster in clusters_info:
+        area = cluster.area
+        if area > 3:
+            centroid = cluster.centroid
+            cluster_table["xc"].append(centroid[0])
+            cluster_table["yc"].append(centroid[1])
+            length = cluster_length(cluster.image)
+            cluster_table["length"].append(length)
+            cluster_table["area"].append(area)
+            cluster_table["width"].append(area / length)
+            cluster_table["angle"].append(cluster.orientation)
+            cluster_table["perimeter"].append(cluster.perimeter)
+            output_cluster.append(cluster)
+
+    return cluster_table, output_cluster
 
 
 class Metrics:
@@ -34,6 +73,7 @@ class Metrics:
         sg_ef = []
         bg_ef = []
         energy = []
+        thresholds = []
         xs, ys = np.where(self._image_truth == 1)
         xb, yb = np.where(self._image_truth == 0)
         energy_truth = self.energy_calc(xs, ys)
@@ -41,6 +81,7 @@ class Metrics:
             thr = bound_inf + i * step
             thr = thr.reshape(-1, 1, 1)
             result = self._image_output > (thr * px_thr)
+            thresholds.append(thr)
             intersection = result[:, xs, ys]
             energy_temp = []
             for image_n in range(intersection.shape[0]):
@@ -51,7 +92,7 @@ class Metrics:
             background_pixels_eff = (result[:, xb, yb] == False).sum(axis=1) / len(xb)
             sg_ef.append(signal_pixels_eff)
             bg_ef.append(background_pixels_eff)
-        return (np.array(sg_ef), np.array(bg_ef)), np.array(energy)
+        return (np.array(sg_ef), np.array(bg_ef)), np.array(energy), np.array(thresholds)
 
     def calc_auc(self, roc):
         x = roc[0, :]
@@ -73,3 +114,35 @@ class Metrics:
 
     def energy_calc(self, xx, yy):
         return self._image_input[xx, yy].sum()
+
+
+class ClusterMetrics:
+    def __init__(self, image_bin, image_truth, image_intensities):
+        self.image_bin = image_bin
+        self.image_truth = image_truth
+        self.image_intensities = image_intensities
+        self.image_truth_cluster = None
+        self.image_bin_cluster = None
+
+    def get_labels(self):
+        self.image_truth_cluster = label(self.image_truth)
+        self.image_bin_cluster = label(self.image_bin)
+
+    def get_clusters_features(self):
+        self.get_labels()
+        table_truth, cluster_truth = cluster_features(self.image_truth_cluster)
+        table_real, cluster_real = cluster_features(self.image_bin_cluster)
+        return table_truth, table_real, cluster_truth, cluster_real
+
+
+
+
+
+
+
+
+
+
+
+
+
