@@ -62,7 +62,8 @@ class ResultGeneration:
         fn = h5py.File(self.file_noise, 'r')  # read file noise
         ped = fn['mean']  # get pedestal
         std = fn['std']  # get std
-        return ped[:, :, 820-self.run_number], std[:, :, 820-self.run_number]  # return values according to run number
+        index = abs(817-self.run_number)
+        return ped[:, :, index], std[:, :, index]  # return values according to run number
 
     # get all h5 simulated files
     def get_file_names(self):
@@ -73,7 +74,7 @@ class ResultGeneration:
 
     def get_filter_results(self, im_no_pad, image_batch, im_bin, std):
         metrics = Metrics(im_no_pad, image_batch, im_bin, std)
-        for threshold_method in ['local', 'global']:
+        for threshold_method in ['global']:
             roc, energy, threshold_array = metrics.roc_build(method=threshold_method)
             self.answer['ROC']['array'].append(roc)
             self.answer['ROC']['energy'].append(energy)
@@ -85,8 +86,8 @@ class ResultGeneration:
            input filters that will be applied and folder where the output file will be saved
            output an output file with results"""
         full_files = self.get_file_names()
-        ped, std = self.get_pedestal()
-        std = self.im_rebin(std, rebin_factor=4)
+        im_ped, std = self.get_pedestal()
+        #std = self.im_rebin(std, rebin_factor=4)
         for file_name in full_files:
             f = h5py.File(file_name, 'r')
             print("Start Analysis")
@@ -100,9 +101,9 @@ class ResultGeneration:
                 a = time()
                 im_real = obj_x_train[image_index, :].reshape(im_dim, im_dim)
                 im_truth = obj_y_train[image_index, :].reshape(im_dim, im_dim)
-                im_real = self.im_rebin(im_real, rebin_factor=4)
-                im_truth = self.im_rebin(im_truth, rebin_factor=4)
-                im_ped = self.im_rebin(ped, rebin_factor=4)
+                #im_real = self.im_rebin(im_real, rebin_factor=4)
+                #im_truth = self.im_rebin(im_truth, rebin_factor=4)
+                #im_ped = self.im_rebin(ped, rebin_factor=4)
                 im_no_pad = im_real - im_ped
                 im_bin = im_truth > 0
                 self.answer['count'].append(str(im_bin.sum()))
@@ -121,7 +122,8 @@ class ResultGeneration:
                         self.answer['time'].append(str(t1.cycles))
                         if roc_build:
                             image_filtered_standardized = (image_filtered-image_filtered.mean())/image_filtered.std()
-                            image_batch = np.append(image_batch, image_filtered_standardized.reshape((1,)+image_filtered.shape), axis=0)
+                            image_batch = np.append(image_batch, image_filtered_standardized.reshape((1, ) +
+                                                    image_filtered.shape), axis=0)
                             self.answer['Filter_name'].append(key)
                             self.answer['Filter_parameter'].append(param)
                 bar2.finish()
@@ -223,7 +225,7 @@ def main():
     inf = filter_settings.inf
     roc_grid = filter_settings.roc_grid
     data = ResultGeneration(data_folder, noise_file, run_number, sup, inf, roc_grid)
-    filters = filter_settings.filters
+    filters = filter_settings.best_filters
     path = filter_settings.output_file_path + filter_settings.output_file_name
     data.calc_metrics(filters=filters, path=path)
     #data.cluster_calc(filters=filter_settings.best_filters, threshold=filter_settings.threshold_parameters)

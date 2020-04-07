@@ -62,8 +62,8 @@ class Metrics:
 
     def roc_build(self, method='local'):
         fs = FilterSettings()
-        bound_sup = np.percentile(np.percentile(self._image_output, 95, axis=2), 95, 1)
-        bound_inf = np.percentile(np.percentile(self._image_output, 5, axis=2), 5, 1)
+        bound_sup = 1.3 * np.percentile(np.percentile(self._image_output, 99, axis=2), 99, 1)
+        bound_inf = 0.7 * np.percentile(np.percentile(self._image_output, 1, axis=2), 1, 1)
         if method == 'local':
             px_thr = np.broadcast_to(self._image_std, self._image_output.shape)
         else:
@@ -113,7 +113,7 @@ class Metrics:
         return output
 
     def energy_calc(self, xx, yy):
-        return self._image_input[xx, yy].sum()
+        return self._image_truth[xx, yy].sum()
 
 
 class ClusterMetrics:
