@@ -1,4 +1,4 @@
-../data/
+data/
 .idea/
 join_h5.py
 .pyc
