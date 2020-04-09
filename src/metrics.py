@@ -73,10 +73,12 @@ class Metrics:
         sg_ef = []
         bg_ef = []
         energy = []
+        energy_real = []
         thresholds = []
         xs, ys = np.where(self._image_truth == 1)
         xb, yb = np.where(self._image_truth == 0)
         energy_truth = self.energy_calc(xs, ys)
+        energy_real_truth = self.energy_calc(xs, ys, kind='real')
         for i in range(0, grid + 1):
             thr = bound_inf + i * step
             thr = thr.reshape(-1, 1, 1)
@@ -84,15 +86,18 @@ class Metrics:
             thresholds.append(thr)
             intersection = result[:, xs, ys]
             energy_temp = []
+            energy_real_temp = []
             for image_n in range(intersection.shape[0]):
                 xi, yi = xs[intersection[image_n, :]], ys[intersection[image_n, :]]
-                energy_temp.append(energy_truth-self.energy_calc(xi, yi))
+                energy_temp.append(self.energy_calc(xi, yi)-energy_truth)
+                energy_real_temp.append(self.energy_calc(xi, yi, kind='real') - energy_real_truth)
             energy.append(energy_temp)
+            energy_real.append(energy_real_temp)
             signal_pixels_eff = result[:, xs, ys].sum(axis=1) / len(xs)
             background_pixels_eff = (result[:, xb, yb] == False).sum(axis=1) / len(xb)
             sg_ef.append(signal_pixels_eff)
             bg_ef.append(background_pixels_eff)
-        return (np.array(sg_ef), np.array(bg_ef)), np.array(energy), np.array(thresholds)
+        return (np.array(sg_ef), np.array(bg_ef)), np.array(energy), np.array(energy_real), np.array(thresholds)
 
     def calc_auc(self, roc):
         x = roc[0, :]
@@ -112,9 +117,11 @@ class Metrics:
             output.append(en_sg / en_bg)
         return output
 
-    def energy_calc(self, xx, yy):
-        return self._image_truth[xx, yy].sum()
-
+    def energy_calc(self, xx, yy, kind='truth'):
+        if kind == 'truth':
+            return self._image_truth[xx, yy].sum()
+        else:
+            return self._image_input[xx, yy].sum()
 
 class ClusterMetrics:
     def __init__(self, image_bin, image_truth, image_intensities):

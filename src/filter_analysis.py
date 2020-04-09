@@ -33,6 +33,7 @@ class ResultGeneration:
         self.answer = {'Image_index': [], 'Filter_name': [], 'count': [], 'Filter_parameter': [], 'time': [],
                        'ROC': {'array': [],
                                'energy': [],
+                               'energy_real': [],
                                'method': [],
                                'threshold': []
                               }
@@ -51,7 +52,7 @@ class ResultGeneration:
         except IndexError:
             n_imgs = 1
             xx, yy = np.meshgrid(index, index)
-            im_rebined = im_input[xx, yy]
+            im_rebined = im_input[yy, xx]
         return im_rebined
 
     # get pedestal from noise file
@@ -75,9 +76,10 @@ class ResultGeneration:
     def get_filter_results(self, im_no_pad, image_batch, im_bin, std):
         metrics = Metrics(im_no_pad, image_batch, im_bin, std)
         for threshold_method in ['global']:
-            roc, energy, threshold_array = metrics.roc_build(method=threshold_method)
+            roc, energy, energy_real, threshold_array = metrics.roc_build(method=threshold_method)
             self.answer['ROC']['array'].append(roc)
             self.answer['ROC']['energy'].append(energy)
+            self.answer['ROC']['energy_real'].append(energy_real)
             self.answer['ROC']['method'].append(threshold_method)
             self.answer['ROC']['threshold'].append(threshold_array)
 
@@ -225,7 +227,7 @@ def main():
     inf = filter_settings.inf
     roc_grid = filter_settings.roc_grid
     data = ResultGeneration(data_folder, noise_file, run_number, sup, inf, roc_grid)
-    filters = filter_settings.best_filters
+    filters = filter_settings.filters
     path = filter_settings.output_file_path + filter_settings.output_file_name
     data.calc_metrics(filters=filters, path=path)
     #data.cluster_calc(filters=filter_settings.best_filters, threshold=filter_settings.threshold_parameters)
