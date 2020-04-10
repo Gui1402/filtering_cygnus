@@ -73,10 +73,11 @@ class ResultGeneration:
             output all h5 files in a list"""
         return glob.glob(self.folder + '/*.h5')  # get all h5 files on interest folder
 
-    def get_filter_results(self, im_no_pad, image_batch, im_bin, std):
-        metrics = Metrics(im_no_pad, image_batch, im_bin, std)
+    def get_filter_results(self, im_no_pad, image_batch, im_bin, std, im_truth):
+        metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth)
         for threshold_method in ['global']:
-            roc, energy, energy_real, threshold_array = metrics.roc_build(method=threshold_method)
+            roc, energy, energy_real, energy_sdv, threshold_array = metrics.roc_build(method=threshold_method)
+            scores = metrics.roc_score(roc, threshold_array, param=0.99)
             self.answer['ROC']['array'].append(roc)
             self.answer['ROC']['energy'].append(energy)
             self.answer['ROC']['energy_real'].append(energy_real)
@@ -130,7 +131,7 @@ class ResultGeneration:
                             self.answer['Filter_parameter'].append(param)
                 bar2.finish()
                 if roc_build:
-                    self.get_filter_results(im_no_pad, image_batch, im_bin, std)
+                    self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth)
                 self.answer['Image_index'].append(image_index)
                 bar.next()
                 b = time()-a
@@ -219,6 +220,7 @@ class ResultGeneration:
 
 
 def main():
+    mode = "cluster"
     filter_settings = FilterSettings()
     data_folder = filter_settings.data_folder
     noise_file = filter_settings.noise_file
@@ -227,7 +229,11 @@ def main():
     inf = filter_settings.inf
     roc_grid = filter_settings.roc_grid
     data = ResultGeneration(data_folder, noise_file, run_number, sup, inf, roc_grid)
-    filters = filter_settings.filters
+    if mode == "cluster":
+        filters = filter_settings.best_filters
+    else:
+        filters = filter_settings.filters
+    filters = filter_settings.best_filters
     path = filter_settings.output_file_path + filter_settings.output_file_name
     data.calc_metrics(filters=filters, path=path)
     #data.cluster_calc(filters=filter_settings.best_filters, threshold=filter_settings.threshold_parameters)

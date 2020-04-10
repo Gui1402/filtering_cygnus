@@ -10,7 +10,7 @@ class FilterSettings:
         self.inf = -26
         self.roc_grid = 80
         self.output_file_path = '../data/'
-        self.output_file_name = 'result_no_rebin'
+        self.output_file_name = 'test'
         self.filters = {'bilateral': [[i, j, k] for i in range(3, 11, 2) for j in range(1, 10, 2) for k in range(1, 10, 2)],
                         'nlmeans': [[i, j] for i in range(1, 13, 2) for j in range(1, 13, 2)],
                         'gaussian': [[3], [5], [7], [9], [11]],

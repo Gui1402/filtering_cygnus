@@ -3,6 +3,7 @@ from settings import FilterSettings
 from skimage.morphology import skeletonize
 from skimage.morphology import label
 from skimage.measure import regionprops, regionprops_table
+from scipy.interpolate import interp1d
 from skimage.filters import laplace
 from skimage.measure import find_contours
 from skimage.transform import rotate
@@ -43,11 +44,12 @@ def cluster_features(img_clusters):
 
 class Metrics:
 
-    def __init__(self, image_input, image_output, image_truth, image_std):
+    def __init__(self, image_input, image_output, image_truth, image_std, img_truth_z):
         self._image_input = image_input
         self._image_output = image_output
         self._image_truth = image_truth
         self._image_std = image_std
+        self._image_truth_z = img_truth_z
 
     def find_a_in_b(self, a, b):
         nrows, ncols = a.shape
@@ -74,6 +76,7 @@ class Metrics:
         bg_ef = []
         energy = []
         energy_real = []
+        energy_should_ve = []
         thresholds = []
         xs, ys = np.where(self._image_truth == 1)
         xb, yb = np.where(self._image_truth == 0)
@@ -85,19 +88,23 @@ class Metrics:
             result = self._image_output > (thr * px_thr)
             thresholds.append(thr)
             intersection = result[:, xs, ys]
+            energy_should_ve_temp = []
             energy_temp = []
             energy_real_temp = []
             for image_n in range(intersection.shape[0]):
                 xi, yi = xs[intersection[image_n, :]], ys[intersection[image_n, :]]
+                xsh, ysh = np.where(result[image_n, :, :] == True)
+                energy_should_ve_temp.append(self.energy_calc(xsh, ysh, 'real'))
                 energy_temp.append(self.energy_calc(xi, yi)-energy_truth)
                 energy_real_temp.append(self.energy_calc(xi, yi, kind='real') - energy_real_truth)
             energy.append(energy_temp)
             energy_real.append(energy_real_temp)
+            energy_should_ve.append(energy_should_ve_temp)
             signal_pixels_eff = result[:, xs, ys].sum(axis=1) / len(xs)
             background_pixels_eff = (result[:, xb, yb] == False).sum(axis=1) / len(xb)
             sg_ef.append(signal_pixels_eff)
             bg_ef.append(background_pixels_eff)
-        return (np.array(sg_ef), np.array(bg_ef)), np.array(energy), np.array(energy_real), np.array(thresholds)
+        return (np.array(sg_ef), np.array(bg_ef)), np.array(energy), np.array(energy_real), np.array(energy_should_ve), np.array(thresholds)
 
     def calc_auc(self, roc):
         x = roc[0, :]
@@ -119,9 +126,43 @@ class Metrics:
 
     def energy_calc(self, xx, yy, kind='truth'):
         if kind == 'truth':
-            return self._image_truth[xx, yy].sum()
+            return self._image_truth_z[xx, yy].sum()
         else:
             return self._image_input[xx, yy].sum()
+
+    @staticmethod
+    def roc_score(roc, threshold, param=0.9):
+        threshold = threshold[:, :, 0, 0]
+        n_filters = threshold.shape[1]
+        x = roc[0]
+        y = roc[1]
+        result = {'f1': [],
+                  'sg_constant': [],
+                  'bg_constant': []}
+
+        f1_score = (2*x*y)/(x+y)
+        best_f1 = f1_score.max(axis=0)
+        best_f1_indexes = f1_score.argmax(axis=0)
+        best_thresholds = threshold[list(best_f1_indexes), range(0, n_filters)]
+        result['f1'].append([best_f1, best_thresholds])
+        sg_constant = []
+        th_sg_constant = []
+        th_bg_constant = []
+        bg_constant = []
+        for filter in range(n_filters):
+            sg_eff, bg_eff, threshold_value = x[:, filter], y[:, filter], threshold[:, filter]
+            csb = interp1d(sg_eff, bg_eff, fill_value=True)
+            cbs = interp1d(bg_eff, sg_eff, fill_value=True)
+            cst = interp1d(sg_eff, threshold_value, fill_value=True)
+            cbt = interp1d(bg_eff, threshold_value, fill_value=True)
+            sg_constant.append(csb(param))
+            bg_constant.append(cbs(param))
+            th_sg_constant.append(cst(param))
+            th_bg_constant.append(cbt(param))
+        result['sg_constant'].append([sg_constant, th_sg_constant])
+        result['bg_constant'].append([bg_constant, th_bg_constant])
+        return result
+
 
 class ClusterMetrics:
     def __init__(self, image_bin, image_truth, image_intensities):
