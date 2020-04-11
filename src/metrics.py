@@ -27,7 +27,7 @@ def cluster_features(img_clusters):
     output_cluster = []
     for cluster in clusters_info:
         area = cluster.area
-        if area > 3:
+        if area > 12:
             centroid = cluster.centroid
             cluster_table["xc"].append(centroid[0])
             cluster_table["yc"].append(centroid[1])
@@ -136,7 +136,7 @@ class Metrics:
         n_filters = threshold.shape[1]
         x = roc[0]
         y = roc[1]
-        result = {'f1': [],
+        result = {'f1_constant': [],
                   'sg_constant': [],
                   'bg_constant': []}
 
@@ -144,7 +144,7 @@ class Metrics:
         best_f1 = f1_score.max(axis=0)
         best_f1_indexes = f1_score.argmax(axis=0)
         best_thresholds = threshold[list(best_f1_indexes), range(0, n_filters)]
-        result['f1'].append([best_f1, best_thresholds])
+        result['f1_constant'].append([best_f1, best_thresholds])
         sg_constant = []
         th_sg_constant = []
         th_bg_constant = []
@@ -173,7 +173,7 @@ class ClusterMetrics:
         self.image_bin_cluster = None
 
     def get_labels(self):
-        self.image_truth_cluster = label(self.image_truth)
+        self.image_truth_cluster = 1*self.image_truth
         self.image_bin_cluster = label(self.image_bin)
 
     def get_clusters_features(self):

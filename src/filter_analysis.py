@@ -12,6 +12,7 @@ from metrics import ClusterMetrics
 import json
 from time import time
 from hwcounter import Timer, count, count_end
+from sklearn.preprocessing import MinMaxScaler
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -34,6 +35,7 @@ class ResultGeneration:
                        'ROC': {'array': [],
                                'energy': [],
                                'energy_real': [],
+                               'energy_sdv': [],
                                'method': [],
                                'threshold': []
                               }
@@ -81,10 +83,42 @@ class ResultGeneration:
             self.answer['ROC']['array'].append(roc)
             self.answer['ROC']['energy'].append(energy)
             self.answer['ROC']['energy_real'].append(energy_real)
+            self.answer['ROC']['energy_sdv'].append(energy_sdv)
             self.answer['ROC']['method'].append(threshold_method)
             self.answer['ROC']['threshold'].append(threshold_array)
+        return scores
 
-    def calc_metrics(self, filters, path, roc_build=True):
+    def get_clusters(self, image_batch_input, scores, im_no_pad, im_bin, mode):
+        mode_key = mode + '_constant'
+        scores = np.array(scores[mode_key][0])
+        threshold_array = scores[1, :]
+        best_images = image_batch_input > threshold_array.reshape(-1, 1, 1)
+        cluster_return = {'cluster': [],
+                          'info': []
+                          }
+        truth_return = {'cluster': [],
+                        'info': []
+                        }
+        for image_index in range(best_images.shape[0]):
+            best_image = best_images[image_index, ...]
+            cluster_metrics = ClusterMetrics(best_image, im_bin, im_no_pad)
+            table_truth, table_real, cluster_truth, cluster_real = cluster_metrics.get_clusters_features()
+            df_truth = pd.DataFrame(table_truth)
+            df_truth['truth'] = True
+            df_real = pd.DataFrame(table_real)
+            df_real['truth'] = False
+            df_merged = df_truth.append(df_real)
+            scaler = MinMaxScaler()
+            scaled_array = scaler.fit_transform(df_merged.drop('truth', axis=1))
+            correlation_matrix = np.corrcoef(scaled_array)
+            got_cluster_index = (-correlation_matrix[0, :]).argsort()[1] - 1
+            cluster_return['cluster'].append(cluster_real[got_cluster_index])
+            cluster_return['info'].append(df_real.iloc[got_cluster_index, :])
+        truth_return['cluster'].append(cluster_truth[0])
+        truth_return['info'].append(df_truth.iloc[0, :])
+        return cluster_return, truth_return
+
+    def calc_metrics(self, filters, path):
         """Apply filter on images and calculate metrics
            input filters that will be applied and folder where the output file will be saved
            output an output file with results"""
@@ -112,7 +146,6 @@ class ResultGeneration:
                 self.answer['count'].append(str(im_bin.sum()))
                 denoising_filter = DenoisingFilters(im_no_pad)
                 image_batch = np.empty([0, im_no_pad.shape[0], im_no_pad.shape[1]])
-                bar2 = Bar('Filtering image ' + str(image_index), fill='#', suffix='%(percent)d%%')
                 for key in filters:
                     filter_name = key + '_filter'
                     func = getattr(DenoisingFilters, filter_name)
@@ -123,21 +156,20 @@ class ResultGeneration:
                         with Timer() as t1:
                             image_filtered = func(denoising_filter, *param)
                         self.answer['time'].append(str(t1.cycles))
-                        if roc_build:
-                            image_filtered_standardized = (image_filtered-image_filtered.mean())/image_filtered.std()
-                            image_batch = np.append(image_batch, image_filtered_standardized.reshape((1, ) +
-                                                    image_filtered.shape), axis=0)
-                            self.answer['Filter_name'].append(key)
-                            self.answer['Filter_parameter'].append(param)
-                bar2.finish()
-                if roc_build:
-                    self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth)
+                        image_filtered_standardized = (image_filtered-image_filtered.mean())/image_filtered.std()
+                        image_batch = np.append(image_batch, image_filtered_standardized.reshape((1, ) +
+                                                image_filtered.shape), axis=0)
+                        self.answer['Filter_name'].append(key)
+                        self.answer['Filter_parameter'].append(param)
+
+                best_results = self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth)
+                self.get_clusters(image_batch, best_results, im_no_pad, im_bin, mode='bg')
                 self.answer['Image_index'].append(image_index)
                 bar.next()
                 b = time()-a
                 remaining = (n_images-image_index)*b
                 print('\n Estimated time per image = ' + str(b))
-                print('\n Remaining (apx) = ' + str(round(remaining/60))+' minutes')
+                print('\n Remaining (apx) = ' + str(round(remaining/60))+' minutes \n')
 
             bar.finish()
 
