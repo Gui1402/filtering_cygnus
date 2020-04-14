@@ -79,14 +79,14 @@ class ResultGeneration:
         metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth)
         for threshold_method in ['global']:
             roc, energy, energy_real, energy_sdv, threshold_array = metrics.roc_build(method=threshold_method)
-            scores = metrics.roc_score(roc, threshold_array, param=0.99)
+            #scores = metrics.roc_score(roc, threshold_array, param=0.99)
             self.answer['ROC']['array'].append(roc)
             self.answer['ROC']['energy'].append(energy)
             self.answer['ROC']['energy_real'].append(energy_real)
             self.answer['ROC']['energy_sdv'].append(energy_sdv)
             self.answer['ROC']['method'].append(threshold_method)
             self.answer['ROC']['threshold'].append(threshold_array)
-        return scores
+        #return scores
 
     def get_clusters(self, image_batch_input, scores, im_no_pad, im_bin, mode):
         mode_key = mode + '_constant'
@@ -147,23 +147,27 @@ class ResultGeneration:
                 denoising_filter = DenoisingFilters(im_no_pad)
                 image_batch = np.empty([0, im_no_pad.shape[0], im_no_pad.shape[1]])
                 for key in filters:
-                    filter_name = key + '_filter'
-                    func = getattr(DenoisingFilters, filter_name)
-                    params = filters[key]
-                    for param in params:
-                        if param is 'lut':
-                            param = [image_index]
-                        with Timer() as t1:
-                            image_filtered = func(denoising_filter, *param)
-                        self.answer['time'].append(str(t1.cycles))
-                        image_filtered_standardized = (image_filtered-image_filtered.mean())/image_filtered.std()
-                        image_batch = np.append(image_batch, image_filtered_standardized.reshape((1, ) +
-                                                image_filtered.shape), axis=0)
+                    if key is not 'cygno':
+                        filter_name = key + '_filter'
+                        func = getattr(DenoisingFilters, filter_name)
+                        params = filters[key]
+                        for param in params:
+                            if param is 'lut':
+                                param = [image_index]
+                            with Timer() as t1:
+                                image_filtered = func(denoising_filter, *param)
+                            self.answer['time'].append(str(t1.cycles))
+                            image_filtered_standardized = (image_filtered-image_filtered.mean())/image_filtered.std()
+                            image_batch = np.append(image_batch, image_filtered_standardized.reshape((1, ) +
+                                                    image_filtered.shape), axis=0)
+                            self.answer['Filter_name'].append(key)
+                            self.answer['Filter_parameter'].append(param)
+                    else:
+                        image_batch = []
                         self.answer['Filter_name'].append(key)
-                        self.answer['Filter_parameter'].append(param)
 
-                best_results = self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth)
-                self.get_clusters(image_batch, best_results, im_no_pad, im_bin, mode='bg')
+                self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth)
+                #self.get_clusters(image_batch, best_results, im_no_pad, im_bin, mode='bg')
                 self.answer['Image_index'].append(image_index)
                 bar.next()
                 b = time()-a
@@ -177,80 +181,6 @@ class ResultGeneration:
         with open(path+'.json', 'w') as f:
             json.dump(dumped, f)
 
-    # def get_cluster_results(self, best_im_bin, im_bin, im_no_pad):
-    #     cluster_metrics = ClusterMetrics(best_im_bin, im_bin, im_no_pad)
-    #     table_truth, table_real, cluster_truth, cluster_real = cluster_metrics.get_clusters_features()
-    #     df_truth = pd.DataFrame(table_truth)
-    #     df_real = pd.DataFrame(table_real)
-    #     return df_truth, df_real
-    # def cluster_calc(self, filters, threshold):
-    #
-    #     """Apply filter on images and calculate metrics
-    #        input filters that will be applied and folder where the output file will be saved
-    #        output an output file with results"""
-    #     full_files = self.get_file_names()
-    #     ped, std = self.get_pedestal()
-    #     std = self.im_rebin(std, rebin_factor=4)
-    #     for file_name in full_files:
-    #         f = h5py.File(file_name, 'r')
-    #         print("Start Analysis")
-    #         obj_x_train = f['x_train']
-    #         obj_y_train = f['y_train']
-    #         size = obj_x_train.shape
-    #         im_dim = int(np.sqrt(size[1]))
-    #         n_images = size[0]
-    #         bar = Bar('Loading', fill='@', suffix='%(percent)d%%')
-    #         for image_index in range(0, n_images):
-    #             a = time()
-    #             im_real = obj_x_train[image_index, :].reshape(im_dim, im_dim)
-    #             im_truth = obj_y_train[image_index, :].reshape(im_dim, im_dim)
-    #             im_real = self.im_rebin(im_real, rebin_factor=4)
-    #             im_truth = self.im_rebin(im_truth, rebin_factor=4)
-    #             im_ped = self.im_rebin(ped, rebin_factor=4)
-    #             im_no_pad = im_real - im_ped
-    #             im_bin = im_truth > 0
-    #             denoising_filter = DenoisingFilters(im_no_pad)
-    #             image_batch = np.empty([0, im_no_pad.shape[0], im_no_pad.shape[1]])
-    #             bar2 = Bar('Filtering image ' + str(image_index), fill='#', suffix='%(percent)d%%')
-    #             for key in filters:
-    #                 filter_name = key + '_filter'
-    #                 func = getattr(DenoisingFilters, filter_name)
-    #                 params = filters[key]
-    #                 for param in params:
-    #                     if param is 'lut':
-    #                         param = [image_index]
-    #                     with Timer() as t1:
-    #                         image_filtered = func(denoising_filter, *param)
-    #                         if ((key == 'mean') and (param[0] == 1)):
-    #                             key_none = 'none'
-    #                             best_im_bin = image_filtered > threshold[key_none]
-    #                         else:
-    #                             best_im_bin = image_filtered > threshold[key]
-    #                         cluster_metrics = ClusterMetrics(best_im_bin, im_bin, im_no_pad)
-    #                         table_truth, table_real, cluster_truth, cluster_real = cluster_metrics.get_clusters_features()
-    #                         df_truth = pd.DataFrame(table_truth)
-    #                         df_real = pd.DataFrame(table_real)
-    #                     #image_filtered_standardized = (image_filtered - image_filtered.mean()) / image_filtered.std()
-    #                     #image_batch = np.append(image_batch,
-    #                     #                        image_filtered_standardized.reshape((1,) + image_filtered.shape),
-    #                     #                        axis=0)
-    #                     bar2.next()
-    #             #bar2.finish()
-    #             #threshold_array = []
-    #             #for t in threshold:
-    #             #    threshold_array.append(threshold[t])
-    #             #threshold_array = np.array(threshold_array).reshape(-1, 1, 1)
-    #             #std_threshold = threshold_array*std
-    #             #best_im_bin = image_batch > std_threshold
-    #             #metrics = Metrics(im_no_pad, image_batch, im_bin, std)
-    #             bar.next()
-    #             b = time() - a
-    #             remaining = (n_images - image_index) * b
-    #             print('\n Estimated time per image = ' + str(b))
-    #             print('\n Remaining (apx) = ' + str(round(remaining / 60)) + ' minutes')
-    #         bar.finish()
-
-
 def main():
     mode = "cluster"
     filter_settings = FilterSettings()
@@ -261,11 +191,7 @@ def main():
     inf = filter_settings.inf
     roc_grid = filter_settings.roc_grid
     data = ResultGeneration(data_folder, noise_file, run_number, sup, inf, roc_grid)
-    if mode == "cluster":
-        filters = filter_settings.best_filters
-    else:
-        filters = filter_settings.filters
-    filters = filter_settings.best_filters
+    filters = filter_settings.filters
     path = filter_settings.output_file_path + filter_settings.output_file_name
     data.calc_metrics(filters=filters, path=path)
     #data.cluster_calc(filters=filter_settings.best_filters, threshold=filter_settings.threshold_parameters)

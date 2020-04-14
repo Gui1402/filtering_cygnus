@@ -62,10 +62,17 @@ class Metrics:
         c = c.view(a.dtype).reshape(-1, ncols)
         return c
 
-    def roc_build(self, method='local'):
+    def roc_build(self, method='global'):
         fs = FilterSettings()
-        bound_sup = 1.3 * np.percentile(np.percentile(self._image_output, 99, axis=2), 99, 1)
-        bound_inf = 0.7 * np.percentile(np.percentile(self._image_output, 1, axis=2), 1, 1)
+        if len(self._image_output) == 0:
+            method = 'local'
+            bound_sup = 5
+            bound_inf = -7
+            self._image_output = self._image_input.reshape((1,) + self._image_input.shape)
+        else:
+            bound_sup = 1.3 * np.percentile(np.percentile(self._image_output, 99, axis=2), 99, 1)
+            bound_inf = 0.7 * np.percentile(np.percentile(self._image_output, 1, axis=2), 1, 1)
+
         if method == 'local':
             px_thr = np.broadcast_to(self._image_std, self._image_output.shape)
         else:
@@ -84,7 +91,10 @@ class Metrics:
         energy_real_truth = self.energy_calc(xs, ys, kind='real')
         for i in range(0, grid + 1):
             thr = bound_inf + i * step
-            thr = thr.reshape(-1, 1, 1)
+            try:
+                thr = thr.reshape(-1, 1, 1)
+            except AttributeError:
+                thr = thr
             result = self._image_output > (thr * px_thr)
             thresholds.append(thr)
             intersection = result[:, xs, ys]
