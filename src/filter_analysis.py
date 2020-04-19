@@ -15,6 +15,17 @@ from hwcounter import Timer, count, count_end
 from sklearn.preprocessing import MinMaxScaler
 
 
+def image_rebin(a, shape):
+    sh = shape[0], a.shape[0] // shape[0], shape[1], a.shape[1] // shape[1]
+    return a.reshape(sh).mean(-1).mean(1)
+
+
+def arrrebin(img, rebin):
+    newshape = int(2048 / rebin)
+    img_rebin = image_rebin(img, (newshape, newshape))
+    return img_rebin
+
+
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.ndarray):
@@ -75,18 +86,63 @@ class ResultGeneration:
             output all h5 files in a list"""
         return glob.glob(self.folder + '/*.h5')  # get all h5 files on interest folder
 
-    def get_filter_results(self, im_no_pad, image_batch, im_bin, std, im_truth):
-        metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth)
-        for threshold_method in ['global']:
-            roc, energy, energy_real, energy_sdv, threshold_array = metrics.roc_build(method=threshold_method)
-            #scores = metrics.roc_score(roc, threshold_array, param=0.99)
-            self.answer['ROC']['array'].append(roc)
-            self.answer['ROC']['energy'].append(energy)
-            self.answer['ROC']['energy_real'].append(energy_real)
-            self.answer['ROC']['energy_sdv'].append(energy_sdv)
-            self.answer['ROC']['method'].append(threshold_method)
-            self.answer['ROC']['threshold'].append(threshold_array)
-        #return scores
+    def get_filter_results(self, im_no_pad, image_batch, im_bin, std, im_truth, keys):
+        if 'cygno' in keys:
+            cygno_index = np.where(keys == 'cygno')[0]
+            image_cygno_batch = []
+            metrics_cygno_object = Metrics(im_no_pad, image_cygno_batch, im_bin, std, im_truth)
+            roc_cy, energy_cy, energy_real_cy, energy_sdv_cy, threshold_array_cy = metrics_cygno_object.roc_build(method='global')
+            image_batch = np.delete(image_batch, cygno_index, axis=0)
+            metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth)
+            roc, energy, energy_real, energy_sdv, threshold_array = metrics.roc_build(method='global')
+            roc0 = np.append(roc_cy[0], roc[0], axis=1)
+            roc1 = np.append(roc_cy[1], roc[1], axis=1)
+            roc = (roc0, roc1)
+            energy = np.append(energy_cy, energy, axis=1)
+            energy_real = np.append(energy_real_cy, energy_real, axis=1)
+            energy_sdv = np.append(energy_sdv_cy, energy_sdv, axis=1)
+            threshold_array = np.append(threshold_array_cy.reshape(-1, 1, 1, 1), threshold_array, axis=1)
+        else:
+            metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth)
+            roc, energy, energy_real, energy_sdv, threshold_array = metrics.roc_build(method='global')
+
+        scores = metrics.roc_score(roc, threshold_array, param=0.90)
+        self.answer['ROC']['array'].append(roc)
+        self.answer['ROC']['energy'].append(energy)
+        self.answer['ROC']['energy_real'].append(energy_real)
+        self.answer['ROC']['energy_sdv'].append(energy_sdv)
+        self.answer['ROC']['threshold'].append(threshold_array)
+        return scores
+
+    def cluster_preprocess(self, image_batch_input, scores, im_no_pad, im_bin, std, keys, mode):
+        mode_key = mode + '_constant'
+        scores = np.array(scores[mode_key][0])
+        threshold_array = scores[1, :]
+        threshold_matrix = np.append(std.reshape((1,) + im_bin.shape), np.ones(shape=((len(keys)-1,)+im_bin.shape)),
+                                     axis=0)
+
+        best_images = image_batch_input > (threshold_array.reshape(-1, 1, 1))*threshold_matrix
+        sg_amount = im_bin.sum()
+        count_bg_before = []
+        count_bg_after = []
+        for image_index in range(best_images.shape[0]):
+            # check amount of bg_pixels
+            xbg, ybg = np.where(im_bin == False)
+            best_image = best_images[image_index, ...]
+            h, w = best_image.shape
+            bg_amount = best_image[xbg, ybg].sum() / ((h * w) - sg_amount)
+            #print("Before rebin :", 100 * bg_amount)
+            img_rb_zs = arrrebin(best_image, rebin=4) > 0
+            img_rb_truth = arrrebin(im_bin, rebin=4) > 0
+
+            sg_rebin_amount = (img_rb_truth > 0).sum()
+            x_rebin_bg, y_rebin_bg = np.where(img_rb_truth == False)
+            h_rebin, w_rebin = img_rb_truth.shape
+            bg_rebin_amount = img_rb_zs[x_rebin_bg, y_rebin_bg].sum() / ((h_rebin * w_rebin) - sg_rebin_amount)
+            count_bg_before.append(bg_amount)
+            count_bg_after.append(bg_rebin_amount)
+
+        return count_bg_before, count_bg_after
 
     def get_clusters(self, image_batch_input, scores, im_no_pad, im_bin, mode):
         mode_key = mode + '_constant'
@@ -99,6 +155,7 @@ class ResultGeneration:
         truth_return = {'cluster': [],
                         'info': []
                         }
+
         for image_index in range(best_images.shape[0]):
             best_image = best_images[image_index, ...]
             cluster_metrics = ClusterMetrics(best_image, im_bin, im_no_pad)
@@ -125,6 +182,8 @@ class ResultGeneration:
         full_files = self.get_file_names()
         im_ped, std = self.get_pedestal()
         #std = self.im_rebin(std, rebin_factor=4)
+        before_mean = 0
+        after_mean = 0
         for file_name in full_files:
             f = h5py.File(file_name, 'r')
             print("Start Analysis")
@@ -163,11 +222,20 @@ class ResultGeneration:
                             self.answer['Filter_name'].append(key)
                             self.answer['Filter_parameter'].append(param)
                     else:
-                        image_batch = []
+                        image_batch = np.append(image_batch, im_no_pad.reshape((1,) + im_no_pad.shape), axis=0)
                         self.answer['Filter_name'].append(key)
+                        self.answer['Filter_parameter'].append('none')
+                        self.answer['time'].append(str(0))
 
-                self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth)
-                #self.get_clusters(image_batch, best_results, im_no_pad, im_bin, mode='bg')
+                keys_array = np.array(list(filters.keys()))
+                best_results = self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth, keys_array)
+                before, after = self.cluster_preprocess(image_batch, best_results, im_no_pad, im_bin, std, keys_array, mode='bg')
+                before_mean += np.array(before).mean()
+                after_mean += np.array(after).mean()
+                print('Before ', before_mean/(image_index+1))
+                print('\n After ', after_mean/(image_index+1))
+
+                #print(result)
                 self.answer['Image_index'].append(image_index)
                 bar.next()
                 b = time()-a
@@ -191,7 +259,7 @@ def main():
     inf = filter_settings.inf
     roc_grid = filter_settings.roc_grid
     data = ResultGeneration(data_folder, noise_file, run_number, sup, inf, roc_grid)
-    filters = filter_settings.filters
+    filters = filter_settings.best_filters
     path = filter_settings.output_file_path + filter_settings.output_file_name
     data.calc_metrics(filters=filters, path=path)
     #data.cluster_calc(filters=filter_settings.best_filters, threshold=filter_settings.threshold_parameters)

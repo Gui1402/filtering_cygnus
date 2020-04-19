@@ -28,13 +28,14 @@ class FilterSettings:
                         #          [self.output_file_path + 'snapshot/BRD_Net/50/model_50.h5']]
                         }
 
-        self.best_filters = {'nlmeans': [[11, 7]],
-                             'bm3D': [[4]],
-                             'gaussian': [[7]],
-                             'mean': [[1], [7]],
-                             'median': [[5]],
-                             'wiener': [[1]],
-                             'bilateral': [[9, 1, 9]],
+        self.best_filters = {'cygno': [],
+                             'nlmeans': [[1, 11]],
+                             #'bm3D': [[5]],
+                             'gaussian': [[11]],
+                             'mean': [[11]],
+                             #'median': [[11]],
+                             #'wiener': [[1]],
+                             #'bilateral': [[9, 1, 9]],
                              #'FCAIDE': ['lut']
                             }
 
