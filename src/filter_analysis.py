@@ -15,14 +15,18 @@ from hwcounter import Timer, count, count_end
 from sklearn.preprocessing import MinMaxScaler
 
 
-def image_rebin(a, shape):
+
+
+def image_rebin(a, shape, mode):
     sh = shape[0], a.shape[0] // shape[0], shape[1], a.shape[1] // shape[1]
-    return a.reshape(sh).mean(-1).mean(1)
+    if mode == 'mean':
+        return a.reshape(sh).mean(-1).mean(1)
+    elif mode == 'median':
+        return np.median(np.median(a.reshape(sh), axis=-1), axis=1)
 
-
-def arrrebin(img, rebin):
+def arrrebin(img, rebin, mode='mean'):
     newshape = int(2048 / rebin)
-    img_rebin = image_rebin(img, (newshape, newshape))
+    img_rebin = image_rebin(img, (newshape, newshape), mode)
     return img_rebin
 
 
@@ -43,11 +47,9 @@ class ResultGeneration:
         self.bound_inf = bound_inf    # the lower bound to remove outliers
         self.roc_grid = roc_grid      # number of points to generate roc curve
         self.answer = {'Image_index': [], 'Filter_name': [], 'count': [], 'Filter_parameter': [], 'time': [],
-                       'ROC': {'array': [],
-                               'energy': [],
-                               'energy_real': [],
-                               'energy_sdv': [],
-                               'method': [],
+                       'ROC': {'full': [],
+                               'rb_mean': [],
+                               'rb_median': [],
                                'threshold': []
                               }
                       }
@@ -91,28 +93,34 @@ class ResultGeneration:
             cygno_index = np.where(keys == 'cygno')[0]
             image_cygno_batch = []
             metrics_cygno_object = Metrics(im_no_pad, image_cygno_batch, im_bin, std, im_truth)
-            roc_cy, energy_cy, energy_real_cy, energy_sdv_cy, threshold_array_cy = metrics_cygno_object.roc_build(method='global')
+            roc_cy, roc_rb_me_cy, roc_rb_md_cy, threshold_array_cy = metrics_cygno_object.roc_build(method='global')
             image_batch = np.delete(image_batch, cygno_index, axis=0)
             metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth)
-            roc, energy, energy_real, energy_sdv, threshold_array = metrics.roc_build(method='global')
+            roc, roc_rb_me, roc_rb_md, threshold_array = metrics.roc_build(method='global')
             roc0 = np.append(roc_cy[0], roc[0], axis=1)
             roc1 = np.append(roc_cy[1], roc[1], axis=1)
             roc = (roc0, roc1)
-            energy = np.append(energy_cy, energy, axis=1)
-            energy_real = np.append(energy_real_cy, energy_real, axis=1)
-            energy_sdv = np.append(energy_sdv_cy, energy_sdv, axis=1)
+
+            roc_rb_me_0 = np.append(roc_rb_me_cy[0], roc_rb_me[0], axis=1)
+            roc_rb_me_1 = np.append(roc_rb_me_cy[1], roc_rb_me[1], axis=1)
+            roc_rb_me = (roc_rb_me_0, roc_rb_me_1)
+
+            roc_rb_md_0 = np.append(roc_rb_md_cy[0], roc_rb_md[0], axis=1)
+            roc_rb_md_1 = np.append(roc_rb_md_cy[1], roc_rb_md[1], axis=1)
+            roc_rb_md = (roc_rb_md_0, roc_rb_md_1)
             threshold_array = np.append(threshold_array_cy.reshape(-1, 1, 1, 1), threshold_array, axis=1)
+
         else:
             metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth)
-            roc, energy, energy_real, energy_sdv, threshold_array = metrics.roc_build(method='global')
+            roc, roc_rb_me, roc_rb_md, threshold_array = metrics.roc_build(method='global')
 
-        scores = metrics.roc_score(roc, threshold_array, param=0.90)
-        self.answer['ROC']['array'].append(roc)
-        self.answer['ROC']['energy'].append(energy)
-        self.answer['ROC']['energy_real'].append(energy_real)
-        self.answer['ROC']['energy_sdv'].append(energy_sdv)
-        self.answer['ROC']['threshold'].append(threshold_array)
-        return scores
+        # scores = metrics.roc_score(roc, threshold_array, param=0.90)
+        # self.answer['ROC']['array'].append(roc)
+        # self.answer['ROC']['energy'].append(energy)
+        # self.answer['ROC']['energy_real'].append(energy_real)
+        # self.answer['ROC']['energy_sdv'].append(energy_sdv)
+        # self.answer['ROC']['threshold'].append(threshold_array)
+        return roc, roc_rb_me, roc_rb_md, threshold_array
 
     def cluster_preprocess(self, image_batch_input, scores, im_no_pad, im_bin, std, keys, mode):
         mode_key = mode + '_constant'
@@ -132,7 +140,7 @@ class ResultGeneration:
             h, w = best_image.shape
             bg_amount = best_image[xbg, ybg].sum() / ((h * w) - sg_amount)
             #print("Before rebin :", 100 * bg_amount)
-            img_rb_zs = arrrebin(best_image, rebin=4) > 0
+            img_rb_zs = arrrebin(best_image, rebin=4, mode='median') > 0
             img_rb_truth = arrrebin(im_bin, rebin=4) > 0
 
             sg_rebin_amount = (img_rb_truth > 0).sum()
@@ -182,8 +190,6 @@ class ResultGeneration:
         full_files = self.get_file_names()
         im_ped, std = self.get_pedestal()
         #std = self.im_rebin(std, rebin_factor=4)
-        before_mean = 0
-        after_mean = 0
         for file_name in full_files:
             f = h5py.File(file_name, 'r')
             print("Start Analysis")
@@ -228,26 +234,28 @@ class ResultGeneration:
                         self.answer['time'].append(str(0))
 
                 keys_array = np.array(list(filters.keys()))
-                best_results = self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth, keys_array)
-                before, after = self.cluster_preprocess(image_batch, best_results, im_no_pad, im_bin, std, keys_array, mode='bg')
-                before_mean += np.array(before).mean()
-                after_mean += np.array(after).mean()
-                print('Before ', before_mean/(image_index+1))
-                print('\n After ', after_mean/(image_index+1))
-
-                #print(result)
+                rf, rme, rmd, th = self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth, keys_array)
+                self.answer['ROC']['full'].append(rf)
+                self.answer['ROC']['rb_mean'].append(rme)
+                self.answer['ROC']['rb_median'].append(rmd)
+                self.answer['ROC']['threshold'].append(th)
                 self.answer['Image_index'].append(image_index)
                 bar.next()
                 b = time()-a
                 remaining = (n_images-image_index)*b
-                print('\n Estimated time per image = ' + str(b))
-                print('\n Remaining (apx) = ' + str(round(remaining/60))+' minutes \n')
+                print('\nEstimated time per image = ' + str(b) + '\n'
+                      'Remaining (apx) = ' + str(round(remaining/60))+' minutes \r',)
+                self.save_json(path)
 
             bar.finish()
 
+
+
+    def save_json(self, path):
         dumped = json.dumps(self.answer, cls=NumpyEncoder)
-        with open(path+'.json', 'w') as f:
+        with open(path + '.json', 'w') as f:
             json.dump(dumped, f)
+
 
 def main():
     mode = "cluster"

@@ -10,16 +10,16 @@ class FilterSettings:
         self.inf = -26
         self.roc_grid = 80
         self.output_file_path = '../data/'
-        self.output_file_name = 'cygno_results'
+        self.output_file_name = 'rebin_test'
         self.filters = {
-                        'cygno': []
-                        #'bilateral': [[i, j, k] for i in range(3, 11, 2) for j in range(1, 10, 2) for k in range(1, 10, 2)],
-                        #'nlmeans': [[i, j] for i in range(1, 13, 2) for j in range(1, 13, 2)],
-                        #'gaussian': [[3], [5], [7], [9], [11]],
-                        #'mean': [[1], [3], [5], [7], [9], [11]],
-                        #'median': [[3], [5], [7], [9], [11]],
-                        #'wiener': [[1], [3], [5], [7]],
-                        #'bm3D': [[1], [2], [3], [4], [5], [6], [7]],
+                        'cygno': [],
+                        'bilateral': [[i, j, k] for i in range(3, 19, 2) for j in range(1, 5, 2) for k in range(1, 19, 2)],
+                        'nlmeans': [[i, j] for i in range(1, 19, 2) for j in range(1, 19, 2)],
+                        'gaussian': [[3], [5], [7], [9], [11], [13], [15]],
+                        'mean': [[3], [5], [7], [9], [11], [13], [15]],
+                        'median': [[3], [5], [7], [9], [11], [13], [15]],
+                        'wiener': [[1], [3]],
+                        'bm3D': [[1], [2], [3], [4], [5], [6], [7]],
                         #'FCAIDE': [[1], [2], [3], [4], [5]],
                         #'DnCNN': [[self.output_file_path + 'snapshot/DnCNN_Net/filtering_cygnus_snapshot_save_DnCNN_run817_2020-03-19-19-19-14_model_40.h5'],
                         #          [self.output_file_path + 'snapshot/DnCNN_Net/model_50.hdf5'],
