@@ -29,10 +29,11 @@ class FilterSettings:
                         }
 
         self.best_filters = {'cygno': [],
-                             'nlmeans': [[1, 11]],
+                             'nlmeans': [[1, 13]],
+                             'gaussian': [[15]]
                              #'bm3D': [[5]],
-                             'gaussian': [[11]],
-                             'mean': [[11]],
+                             #'gaussian': [[11]],
+                             #'mean': [[11]],
                              #'median': [[11]],
                              #'wiener': [[1]],
                              #'bilateral': [[9, 1, 9]],

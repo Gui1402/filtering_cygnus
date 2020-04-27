@@ -112,21 +112,16 @@ class Metrics:
         bg_ef_mean = []
         sg_ef_median = []
         bg_ef_median = []
-        # energy = []
-        # energy_real = []
-        # energy_should_ve = []
+        energy_intersect = []
         thresholds = []
         xs, ys = np.where(self._image_truth == 1)
         xb, yb = np.where(self._image_truth == 0)
-
         im_truth_rebin_mean = image_rebin(self._image_truth, rebin_factor=4, mode='mean')
         im_truth_rebin_median = image_rebin(self._image_truth, rebin_factor=4, mode='median')
         xs_me, ys_me = np.where(im_truth_rebin_mean == 1)
         xs_md, ys_md = np.where(im_truth_rebin_median == 1)
         xb_me, yb_me = np.where(im_truth_rebin_mean == 0)
         xb_md, yb_md = np.where(im_truth_rebin_median == 0)
-        # energy_truth = self.energy_calc(xs, ys)
-        # energy_real_truth = self.energy_calc(xs, ys, kind='real')
         for i in range(0, grid + 1):
             thr = bound_inf + i * step
             try:
@@ -137,42 +132,31 @@ class Metrics:
             mean_rebin = image_rebin(images_after_threshold, rebin_factor=4, mode='mean')
             median_rebin = image_rebin(images_after_threshold, rebin_factor=4, mode='median')
 
-            full_sg_eff, full_bg_eff = self.roc_outputs(images_after_threshold, xs, ys, xb, yb)
-            me_sg_eff, me_bg_eff = self.roc_outputs(mean_rebin, xs_me, ys_me, xb_me, yb_me)
-            md_sg_eff, md_bg_eff = self.roc_outputs(median_rebin, xs_md, ys_md, xb_md, yb_md)
+            full_sg_eff, full_bg_eff, energy = self.roc_outputs(images_after_threshold, xs, ys, xb, yb)
+            me_sg_eff, me_bg_eff, _ = self.roc_outputs(mean_rebin, xs_me, ys_me, xb_me, yb_me)
+            md_sg_eff, md_bg_eff, _ = self.roc_outputs(median_rebin, xs_md, ys_md, xb_md, yb_md)
             sg_ef.append(full_sg_eff)
             bg_ef.append(full_bg_eff)
             sg_ef_mean.append(me_sg_eff)
             bg_ef_mean.append(me_bg_eff)
             sg_ef_median.append(md_sg_eff)
             bg_ef_median.append(md_bg_eff)
+            energy_intersect.append(energy)
             thresholds.append(thr)
         return (np.array(sg_ef), np.array(bg_ef)), (np.array(sg_ef_mean), np.array(bg_ef_mean)), \
                (np.array(sg_ef_median), np.array(bg_ef_median)), \
-                np.array(thresholds)
+                np.array(thresholds), len(xs_md), len(xs_me), np.array(energy_intersect)
 
     def roc_outputs(self, result, xs, ys, xb, yb):
-        intersection = result[:, xs, ys]
-        #energy_should_ve_temp = []
-        #energy_temp = []
-        #energy_real_temp = []
-        #for image_n in range(intersection.shape[0]):
-        #    xi, yi = xs[intersection[image_n, :]], ys[intersection[image_n, :]]
-        #    xsh, ysh = np.where(result[image_n, :, :] == True)
-            #energy_should_ve_temp.append(self.energy_calc(xsh, ysh, 'real'))
-            #energy_temp.append(self.energy_calc(xi, yi) - energy_truth)
-            #energy_real_temp.append(self.energy_calc(xi, yi, kind='real') - energy_real_truth)
-        #energy.append(energy_temp)
-        #energy_real.append(energy_real_temp)
-        #energy_should_ve.append(energy_should_ve_temp)
+        index_matrix = np.array(np.where(result[:, xs, ys] == True)).T
+        index_matrix = np.append(index_matrix, np.array((xs[index_matrix[:, 1]], ys[index_matrix[:, 1]])).T,
+                                 axis=1)[:, [0, 2, 3]]
+        z_values = self._image_input[index_matrix[:, 1], index_matrix[:, 2]]
+        z_values_split = np.split(z_values, np.cumsum(np.unique(index_matrix[:, 0], return_counts=True)[1])[:-1])
+        energy = list(map(sum, z_values_split))
         signal_pixels_eff = result[:, xs, ys].sum(axis=1) / len(xs)
         background_pixels_eff = (result[:, xb, yb] == False).sum(axis=1) / len(xb)
-        return signal_pixels_eff, background_pixels_eff
-        #sg_ef.append(signal_pixels_eff)
-        #bg_ef.append(background_pixels_eff)
-
-        #return (np.array(sg_ef), np.array(bg_ef)), np.array(energy), np.array(energy_real), np.array(
-        #        energy_should_ve), np.array(thresholds)
+        return signal_pixels_eff, background_pixels_eff, energy
 
     def calc_auc(self, roc):
         x = roc[0, :]
