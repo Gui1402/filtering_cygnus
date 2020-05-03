@@ -10,17 +10,37 @@ from skimage.transform import rotate
 from skimage.morphology import disk
 
 
-# def image_rebin(a, shape, mode):
-#     sh = shape[0], a.shape[0] // shape[0], shape[1], a.shape[1] // shape[1]
-#     if mode == 'mean':
-#         return a.reshape(sh).mean(-1).mean(1)
-#     elif mode == 'median':
-#         return np.median(np.median(a.reshape(sh), axis=-1), axis=1)
-#
-# def arrrebin(img, rebin, mode='mean'):
-#     newshape = int(2048 / rebin)
-#     img_rebin = image_rebin(img, (newshape, newshape), mode)
-#     return img_rebin
+def roc_score(roc, threshold, param=0.9):
+    threshold = threshold[:, :, 0, 0]
+    n_filters = threshold.shape[1]
+    x = roc[0]
+    y = roc[1]
+    result = {'f1_constant': [],
+              'sg_constant': [],
+              'bg_constant': []}
+
+    f1_score = (2 * x * y) / (x + y)
+    best_f1 = f1_score.max(axis=0)
+    best_f1_indexes = f1_score.argmax(axis=0)
+    best_thresholds = threshold[list(best_f1_indexes), range(0, n_filters)]
+    result['f1_constant'].append([best_f1, best_thresholds])
+    sg_constant = []
+    th_sg_constant = []
+    th_bg_constant = []
+    bg_constant = []
+    for filter in range(n_filters):
+        sg_eff, bg_eff, threshold_value = x[:, filter], y[:, filter], threshold[:, filter]
+        csb = interp1d(sg_eff, bg_eff, fill_value=True)
+        cbs = interp1d(bg_eff, sg_eff, fill_value=True)
+        cst = interp1d(sg_eff, threshold_value, fill_value=True)
+        cbt = interp1d(bg_eff, threshold_value, fill_value=True)
+        sg_constant.append(csb(param))
+        bg_constant.append(cbs(param))
+        th_sg_constant.append(cst(param))
+        th_bg_constant.append(cbt(param))
+    result['sg_constant'].append([sg_constant, th_sg_constant])
+    result['bg_constant'].append([bg_constant, th_bg_constant])
+    return result
 
 def image_rebin(image_input, rebin_factor, mode='mean', threshold=0):
     image_shape = image_input.shape
@@ -182,38 +202,8 @@ class Metrics:
         else:
             return self._image_input[xx, yy].sum()
 
-    @staticmethod
-    def roc_score(roc, threshold, param=0.9):
-        threshold = threshold[:, :, 0, 0]
-        n_filters = threshold.shape[1]
-        x = roc[0]
-        y = roc[1]
-        result = {'f1_constant': [],
-                  'sg_constant': [],
-                  'bg_constant': []}
 
-        f1_score = (2*x*y)/(x+y)
-        best_f1 = f1_score.max(axis=0)
-        best_f1_indexes = f1_score.argmax(axis=0)
-        best_thresholds = threshold[list(best_f1_indexes), range(0, n_filters)]
-        result['f1_constant'].append([best_f1, best_thresholds])
-        sg_constant = []
-        th_sg_constant = []
-        th_bg_constant = []
-        bg_constant = []
-        for filter in range(n_filters):
-            sg_eff, bg_eff, threshold_value = x[:, filter], y[:, filter], threshold[:, filter]
-            csb = interp1d(sg_eff, bg_eff, fill_value=True)
-            cbs = interp1d(bg_eff, sg_eff, fill_value=True)
-            cst = interp1d(sg_eff, threshold_value, fill_value=True)
-            cbt = interp1d(bg_eff, threshold_value, fill_value=True)
-            sg_constant.append(csb(param))
-            bg_constant.append(cbs(param))
-            th_sg_constant.append(cst(param))
-            th_bg_constant.append(cbt(param))
-        result['sg_constant'].append([sg_constant, th_sg_constant])
-        result['bg_constant'].append([bg_constant, th_bg_constant])
-        return result
+
 
 
 class ClusterMetrics:

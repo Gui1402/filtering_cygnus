@@ -10,7 +10,12 @@ from time import time
 from hwcounter import Timer
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-
+from metrics import roc_score, image_rebin
+from sklearn.cluster import DBSCAN
+from sklearn.neighbors import NearestNeighbors
+from skopt.space import Real, Integer
+from skopt.utils import use_named_args
+from skopt import gp_minimize
 
 def animation_plot(image, threshold, std, sg, bg, name):
     """
@@ -37,9 +42,69 @@ def animation_plot(image, threshold, std, sg, bg, name):
         print(ani.to_html5_video(), file=f)
 
 
+def apply_dbscan(image_batch, im_bin, std_map, threshold_array, key_names, rebin_mode):
+    """
+    DBSCAN clustering find optimal parameters
+
+    :param image_batch: Filtered images that will be evaluated (k, M, N)
+    :param threshold_array: threshold select from roc curves (k,)
+    :param key_names: Filter names (k,)
+    :return: best point, best parameters, clusters
+    """
+    returns = {'filter_name': [],
+               'best_point': [],
+               'best_parameters': [],
+               'labels': []
+               }
+    index = 0
+    image_truth_rebin = image_rebin(im_bin, rebin_factor=4, mode=rebin_mode)
+    for th, name in zip(threshold_array, key_names):
+        if name == 'cygno':
+            std = std_map
+        else:
+            std = np.ones(shape=(image_batch.shape[-2], image_batch.shape[-1]))
+        image_binary = image_batch[index, ...] > th*std
+        image_binary_rebin = image_rebin(image_binary, rebin_factor=4, mode=rebin_mode)
+        x_coord, y_coord = np.where(image_binary_rebin == True)
+        X = np.array([x_coord, y_coord]).T
+        index += 1
+        neigh = NearestNeighbors(n_neighbors=2)
+        nbrs = neigh.fit(X)
+        distances, indices = nbrs.kneighbors(X)
+        y = image_truth_rebin[X[:, 0], X[:, 1]].astype(float)
+        space = [Integer(0, 1000, name='min_samples'),
+                 Real(distances[distances>0].min(), distances.max(), "log-uniform", name='eps')]
+        @use_named_args(space)
+        def objective(**params):
+            m = DBSCAN(**params)
+            l = m.fit(X).labels_
+            result = l != -1
+            sd = float(result[y == True].sum()) / sum(y == True)
+            br = float((result[y == False] == False).sum()) / sum(y == False)
+            f1 = 2 * (sd * br) / (sd + br)
+            return 1 - f1
+
+        res_gp = gp_minimize(objective, space, n_calls=50, random_state=0)
+        m = DBSCAN(min_samples=res_gp.x[0], eps=res_gp.x[1])
+        labels = m.fit(X).labels_
+        returns['filter_name'].append(name)
+        returns['best_point'].append(res_gp.fun)
+        returns['best_parameters'].append([res_gp.x[1], res_gp.x[0]])
+        returns['labels'].append(np.append(X, labels.reshape(-1,1), axis=1))
+    return returns
+
+
 class NumpyEncoder(json.JSONEncoder):
+    """ Special json encoder for numpy types """
     def default(self, obj):
-        if isinstance(obj, np.ndarray):
+        if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
+            np.int16, np.int32, np.int64, np.uint8,
+            np.uint16, np.uint32, np.uint64)):
+            return int(obj)
+        elif isinstance(obj, (np.float_, np.float16, np.float32,
+            np.float64)):
+            return float(obj)
+        elif isinstance(obj,(np.ndarray,)): #### This is the fix
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
@@ -63,7 +128,8 @@ class ResultGeneration:
                                   'image_after_threshold': []},
                        'Counts': {'full': [],
                                   'rb_mean': [],
-                                  'rb_median': []}
+                                  'rb_median': []},
+                       'Clustering': []
                        }
 
     # get pedestal from noise file
@@ -125,6 +191,8 @@ class ResultGeneration:
             roc, roc_rb_me, roc_rb_md, threshold_array, count_md, count_me, energy = results
         return roc, roc_rb_me, roc_rb_md, threshold_array, count_md, count_me, energy
 
+
+
     def calc_metrics(self, filters, path):
         """Apply filter on images and calculate metrics
            input filters that will be applied and folder where the output file will be saved
@@ -146,7 +214,7 @@ class ResultGeneration:
                 im_truth = obj_y_train[image_index, :].reshape(im_dim, im_dim)
                 im_no_pad = im_real - im_ped
                 im_bin = im_truth > 0
-                self.answer['count'].append(str(im_bin.sum()))
+                #self.answer['count'].append(str(im_bin.sum()))
                 denoising_filter = DenoisingFilters(im_no_pad)
                 image_batch = np.empty([0, im_no_pad.shape[0], im_no_pad.shape[1]])
                 for key in filters:
@@ -174,6 +242,11 @@ class ResultGeneration:
                 keys_array = np.array(list(filters.keys()))
                 results = self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth, keys_array)
                 (rf, rme, rmd, th, count_md, count_me, energy_array) = results
+                #p_choose = roc_score(rmd, th, param=0.90)
+                #th_choose = [float(value) for value in p_choose['bg_constant'][0][1]]
+                th_choose = abs(0.9 - rmd[1]).argmin(axis=0)
+                th_choose = th[th_choose, range(th.shape[1]), 0, 0]
+                db_result = apply_dbscan(image_batch, im_bin, std, th_choose, keys_array, rebin_mode='median')
                 self.answer['Energy']['image_truth'] = im_truth.sum()
                 self.answer['Energy']['image_real'] = im_no_pad.sum()
                 self.answer['Energy']['image_after_threshold'] = energy_array
@@ -181,16 +254,17 @@ class ResultGeneration:
                 self.answer['ROC']['rb_mean'].append(rme)
                 self.answer['ROC']['rb_median'].append(rmd)
                 self.answer['ROC']['threshold'].append(th)
-                self.answer['Count']['full'].append(str(im_bin.sum()))
-                self.answer['Count']['rb_mean'].append(str(count_me))
-                self.answer['Count']['rb_median'].append(str(count_md))
+                self.answer['Counts']['full'].append(str(im_bin.sum()))
+                self.answer['Counts']['rb_mean'].append(str(count_me))
+                self.answer['Counts']['rb_median'].append(str(count_md))
                 self.answer['Image_index'].append(image_index)
+                self.answer['Clustering'].append(db_result)
                 bar.next()
                 b = time()-a
                 remaining = (n_images-image_index)*b
                 print('\nEstimated time per image = ' + str(b) + '\n'
                       'Remaining (apx) = ' + str(round(remaining/60))+' minutes \r',)
-                #self.save_json(path)
+                self.save_json(path)
 
             bar.finish()
 

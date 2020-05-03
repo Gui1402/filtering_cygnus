@@ -10,7 +10,7 @@ class FilterSettings:
         self.inf = -26
         self.roc_grid = 80
         self.output_file_path = '../data/'
-        self.output_file_name = 'rebin_test'
+        self.output_file_name = 'clustering_eval'
         self.filters = {
                         'cygno': [],
                         'bilateral': [[i, j, k] for i in range(3, 19, 2) for j in range(1, 5, 2) for k in range(1, 19, 2)],
