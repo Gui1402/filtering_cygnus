@@ -176,6 +176,14 @@ class Metrics:
         energy = list(map(sum, z_values_split))
         signal_pixels_eff = result[:, xs, ys].sum(axis=1) / len(xs)
         background_pixels_eff = (result[:, xb, yb] == False).sum(axis=1) / len(xb)
+
+        # check energy shape
+        if len(energy) != result.shape[0]:
+            energy_adj = np.zeros(shape=(result.shape[0],))
+            energy_adj[result.sum(axis=1).sum(axis=1) != 0] = energy
+            energy = list(energy_adj)
+
+
         return signal_pixels_eff, background_pixels_eff, energy
 
     def calc_auc(self, roc):
