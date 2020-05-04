@@ -72,8 +72,13 @@ def apply_dbscan(image_batch, im_bin, std_map, threshold_array, key_names, rebin
         nbrs = neigh.fit(X)
         distances, indices = nbrs.kneighbors(X)
         y = image_truth_rebin[X[:, 0], X[:, 1]].astype(float)
+        eps_low = distances[distances>0].min()
+        eps_high = distances.max()
+        if(eps_high <= eps_low):
+            eps_high = 20
+            eps_low = 0.5
         space = [Integer(0, 1000, name='min_samples'),
-                 Real(distances[distances>0].min(), distances.max(), "log-uniform", name='eps')]
+                 Real(eps_low, eps_high , "log-uniform", name='eps')]
         @use_named_args(space)
         def objective(**params):
             m = DBSCAN(**params)
