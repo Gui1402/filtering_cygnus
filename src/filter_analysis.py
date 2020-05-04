@@ -124,12 +124,13 @@ class ResultGeneration:
                                'rb_median': [],
                                'threshold': []},
                        'Energy': {'image_truth': [],
-                                  'image_no_ped': [],
+                                  'image_real': [],
                                   'image_after_threshold': []},
                        'Counts': {'full': [],
                                   'rb_mean': [],
                                   'rb_median': []},
-                       'Clustering': []
+                       'Clustering': {'mean': [],
+                                      'median':[]}
                        }
 
     # get pedestal from noise file
@@ -242,14 +243,20 @@ class ResultGeneration:
                 keys_array = np.array(list(filters.keys()))
                 results = self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth, keys_array)
                 (rf, rme, rmd, th, count_md, count_me, energy_array) = results
-                #p_choose = roc_score(rmd, th, param=0.90)
-                #th_choose = [float(value) for value in p_choose['bg_constant'][0][1]]
-                th_choose = abs(0.9 - rmd[1]).argmin(axis=0)
-                th_choose = th[th_choose, range(th.shape[1]), 0, 0]
-                db_result = apply_dbscan(image_batch, im_bin, std, th_choose, keys_array, rebin_mode='median')
-                self.answer['Energy']['image_truth'] = im_truth.sum()
-                self.answer['Energy']['image_real'] = im_no_pad.sum()
-                self.answer['Energy']['image_after_threshold'] = energy_array
+                p_choose = roc_score(rmd, th, param=0.90)
+                th_choose = [float(value) for value in p_choose['bg_constant'][0][1]]
+                #th_choose = abs(0.9 - rmd[1]).argmin(axis=0)
+                #th_choose = th[th_choose, range(th.shape[1]), 0, 0]
+                for mode in ['mean', 'median']:
+                    self.answer['Clustering'][mode].append(apply_dbscan(image_batch,
+                                                                              im_bin,
+                                                                              std,
+                                                                              th_choose,
+                                                                              keys_array,
+                                                                              rebin_mode=mode))
+                self.answer['Energy']['image_truth'].append(im_truth.sum())
+                self.answer['Energy']['image_real'].append(im_no_pad.sum())
+                self.answer['Energy']['image_after_threshold'].append(energy_array)
                 self.answer['ROC']['full'].append(rf)
                 self.answer['ROC']['rb_mean'].append(rme)
                 self.answer['ROC']['rb_median'].append(rmd)
@@ -258,7 +265,6 @@ class ResultGeneration:
                 self.answer['Counts']['rb_mean'].append(str(count_me))
                 self.answer['Counts']['rb_median'].append(str(count_md))
                 self.answer['Image_index'].append(image_index)
-                self.answer['Clustering'].append(db_result)
                 bar.next()
                 b = time()-a
                 remaining = (n_images-image_index)*b
