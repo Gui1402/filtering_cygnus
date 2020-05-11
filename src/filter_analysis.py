@@ -325,7 +325,7 @@ def main(rebin, clustering):
     inf = filter_settings.inf
     roc_grid = filter_settings.roc_grid
     data = ResultGeneration(data_folder, noise_file, run_number, sup, inf, roc_grid)
-    filters = filter_settings.best_filters
+    filters = filter_settings.filters
     path = filter_settings.output_file_path + filter_settings.output_file_name
     data.calc_metrics(filters=filters, path=path, rebin=rebin, clustering=clustering)
 
