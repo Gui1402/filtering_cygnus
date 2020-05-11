@@ -117,13 +117,14 @@ class NumpyEncoder(json.JSONEncoder):
 class ResultGeneration:
 
     def __init__(self, folder, file_noise, run_number, bound_sup, bound_inf, roc_grid):
-        self.folder = folder  # folder where there are h5 files
+        self.infile = folder  # folder where there are h5 files
         self.file_noise = file_noise  # folder that has the noise files
         self.run_number = run_number  # the run number for the noise
         self.bound_sup = bound_sup    # the upper bound to remove outliers
         self.bound_inf = bound_inf    # the lower bound to remove outliers
         self.roc_grid = roc_grid      # number of points to generate roc curve
-        self.answer = {'Image_index': [], 'Filter_name': [], 'Filter_parameter': [], 'time': [],
+        self.input_images = None
+        self.answer = {'Image_path': [], 'Image_index': [], 'Filter_name': [], 'Filter_parameter': [], 'time': [],
                        'ROC': {'full': [],
                                'rb_mean': [],
                                'rb_median': [],
@@ -149,7 +150,13 @@ class ResultGeneration:
         index = abs(817-self.run_number)
         return ped[:, :, index], std[:, :, index]  # return values according to run number
 
-    # get all h5 simulated files
+    def load_images(self):
+        input_data = open(self.infile).read()
+        self.input_images = json.loads(json.loads(input_data))
+
+
+
+        # get all h5 simulated files
     def get_file_names(self):
         """ get all .h5 files in folder
             input None
@@ -224,21 +231,23 @@ class ResultGeneration:
         """Apply filter on images and calculate metrics
            input filters that will be applied and folder where the output file will be saved
            output an output file with results"""
-        full_files = self.get_file_names()
         im_ped, std = self.get_pedestal()
-        for file_name in full_files:
-            f = h5py.File(file_name, 'r')
-            print("Start Analysis")
-            obj_x_train = f['x_train']
-            obj_y_train = f['y_train']
-            size = obj_x_train.shape
-            im_dim = int(np.sqrt(size[1]))
-            n_images = size[0]
+        self.load_images()
+        file_names = self.input_images.keys()
+        for file in file_names:
+            image_dict = self.input_images[file]
+            image_index = image_dict.keys()
             bar = Bar('Loading', fill='@', suffix='%(percent)d%%')
-            for image_index in range(0, n_images):
+            for image_name in image_index:
                 a = time()
-                im_real = obj_x_train[image_index, :].reshape(im_dim, im_dim)
-                im_truth = obj_y_train[image_index, :].reshape(im_dim, im_dim)
+                #im_real = obj_x_train[image_index, :].reshape(im_dim, im_dim)
+                #im_truth = obj_y_train[image_index, :].reshape(im_dim, im_dim)
+                ipx_truth = image_dict[image_name]
+                ipx_truth = np.array(ipx_truth)
+                im_truth = np.zeros_like(im_ped)
+                im_truth[ipx_truth[:,0], ipx_truth[:, 1]] = ipx_truth[:, 2]
+                noise_sample = np.random.normal(loc=im_ped, scale=std)
+                im_real = im_truth + noise_sample
                 im_no_pad = im_real - im_ped
                 im_bin = im_truth > 0
                 denoising_filter = DenoisingFilters(im_no_pad)
@@ -287,12 +296,13 @@ class ResultGeneration:
                 self.answer['Counts']['full'].append(str(im_bin.sum()))
                 self.answer['Counts']['rb_mean'].append(str(count_me))
                 self.answer['Counts']['rb_median'].append(str(count_md))
-                self.answer['Image_index'].append(image_index)
+                self.answer['Image_index'].append(image_name)
+                self.answer['Image_path'].append(file)
                 bar.next()
                 b = time()-a
-                remaining = (n_images-image_index)*b
-                print('\nEstimated time per image = ' + str(b) + '\n'
-                      'Remaining (apx) = ' + str(round(remaining/60))+' minutes \r',)
+                #remaining = (n_images-image_index)*b
+                #print('\nEstimated time per image = ' + str(b) + '\n'
+                #      'Remaining (apx) = ' + str(round(remaining/60))+' minutes \r',)
                 self.save_json(path)
 
             bar.finish()
@@ -321,10 +331,10 @@ def main(rebin, clustering):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--rebin", type=bool, help="If rebin will be analyzed")
-    parser.add_argument("--cluster", type=bool, help="If clustering will be analyzed")
-    args = parser.parse_args()
-    print(getattr(args, 'cluster'))
-    #main(parser.rb, parser.cluster)
+    #parser = argparse.ArgumentParser()
+    #parser.add_argument("--rebin", type=bool, help="If rebin will be analyzed")
+    #parser.add_argument("--cluster", type=bool, help="If clustering will be analyzed")
+    #args = parser.parse_args()
+    #print(getattr(args, 'cluster'))
+    main(False, False)
 

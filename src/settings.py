@@ -3,7 +3,7 @@
 class FilterSettings:
     # constructor
     def __init__(self):
-        self.data_folder = '../data/Runs001'
+        self.data_folder = '../data/simulations.json'
         self.noise_file = '../data/noise/noise_data.h5'
         self.run_number = 817
         self.sup = 16
