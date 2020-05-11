@@ -91,12 +91,13 @@ def cluster_features(img_clusters):
 
 class Metrics:
 
-    def __init__(self, image_input, image_output, image_truth, image_std, img_truth_z):
+    def __init__(self, image_input, image_output, image_truth, image_std, img_truth_z, rebin):
         self._image_input = image_input
         self._image_output = image_output
         self._image_truth = image_truth
         self._image_std = image_std
         self._image_truth_z = img_truth_z
+        self._try_rebin = rebin
 
     def find_a_in_b(self, a, b):
         nrows, ncols = a.shape
@@ -124,24 +125,26 @@ class Metrics:
             px_thr = np.broadcast_to(self._image_std, self._image_output.shape)
         else:
             px_thr = np.ones_like(self._image_output)
+
         grid = fs.roc_grid
         step = (bound_sup - bound_inf) / grid
         sg_ef = []
         bg_ef = []
-        sg_ef_mean = []
-        bg_ef_mean = []
-        sg_ef_median = []
-        bg_ef_median = []
         energy_intersect = []
         thresholds = []
         xs, ys = np.where(self._image_truth == 1)
         xb, yb = np.where(self._image_truth == 0)
-        im_truth_rebin_mean = image_rebin(self._image_truth, rebin_factor=4, mode='mean')
-        im_truth_rebin_median = image_rebin(self._image_truth, rebin_factor=4, mode='median')
-        xs_me, ys_me = np.where(im_truth_rebin_mean == 1)
-        xs_md, ys_md = np.where(im_truth_rebin_median == 1)
-        xb_me, yb_me = np.where(im_truth_rebin_mean == 0)
-        xb_md, yb_md = np.where(im_truth_rebin_median == 0)
+        if self._try_rebin:
+            sg_ef_mean = []
+            bg_ef_mean = []
+            sg_ef_median = []
+            bg_ef_median = []
+            im_truth_rebin_mean = image_rebin(self._image_truth, rebin_factor=4, mode='mean')
+            im_truth_rebin_median = image_rebin(self._image_truth, rebin_factor=4, mode='median')
+            xs_me, ys_me = np.where(im_truth_rebin_mean == 1)
+            xs_md, ys_md = np.where(im_truth_rebin_median == 1)
+            xb_me, yb_me = np.where(im_truth_rebin_mean == 0)
+            xb_md, yb_md = np.where(im_truth_rebin_median == 0)
         for i in range(0, grid + 1):
             thr = bound_inf + i * step
             try:
@@ -149,23 +152,30 @@ class Metrics:
             except AttributeError:
                 thr = thr
             images_after_threshold = self._image_output > (thr * px_thr)
-            mean_rebin = image_rebin(images_after_threshold, rebin_factor=4, mode='mean')
-            median_rebin = image_rebin(images_after_threshold, rebin_factor=4, mode='median')
-
+            if self._try_rebin:
+                mean_rebin = image_rebin(images_after_threshold, rebin_factor=4, mode='mean')
+                median_rebin = image_rebin(images_after_threshold, rebin_factor=4, mode='median')
+                me_sg_eff, me_bg_eff, _ = self.roc_outputs(mean_rebin, xs_me, ys_me, xb_me, yb_me)
+                md_sg_eff, md_bg_eff, _ = self.roc_outputs(median_rebin, xs_md, ys_md, xb_md, yb_md)
+                sg_ef_mean.append(me_sg_eff)
+                bg_ef_mean.append(me_bg_eff)
+                sg_ef_median.append(md_sg_eff)
+                bg_ef_median.append(md_bg_eff)
+            else:
+                sg_ef_mean = []
+                bg_ef_mean = []
+                sg_ef_median = []
+                bg_ef_median = []
+                xs_md = []
+                xs_me = []
             full_sg_eff, full_bg_eff, energy = self.roc_outputs(images_after_threshold, xs, ys, xb, yb)
-            me_sg_eff, me_bg_eff, _ = self.roc_outputs(mean_rebin, xs_me, ys_me, xb_me, yb_me)
-            md_sg_eff, md_bg_eff, _ = self.roc_outputs(median_rebin, xs_md, ys_md, xb_md, yb_md)
             sg_ef.append(full_sg_eff)
             bg_ef.append(full_bg_eff)
-            sg_ef_mean.append(me_sg_eff)
-            bg_ef_mean.append(me_bg_eff)
-            sg_ef_median.append(md_sg_eff)
-            bg_ef_median.append(md_bg_eff)
             energy_intersect.append(energy)
             thresholds.append(thr)
-        return (np.array(sg_ef), np.array(bg_ef)), (np.array(sg_ef_mean), np.array(bg_ef_mean)), \
-               (np.array(sg_ef_median), np.array(bg_ef_median)), \
-                np.array(thresholds), len(xs_md), len(xs_me), np.array(energy_intersect)
+        return [np.array(sg_ef), np.array(bg_ef), np.array(sg_ef_mean), np.array(bg_ef_mean),
+               np.array(sg_ef_median), np.array(bg_ef_median),
+               np.array(thresholds), len(xs_md), len(xs_me), np.array(energy_intersect)]
 
     def roc_outputs(self, result, xs, ys, xb, yb):
         index_matrix = np.array(np.where(result[:, xs, ys] == True)).T
