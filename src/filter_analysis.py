@@ -17,6 +17,7 @@ from skopt.space import Real, Integer
 from skopt.utils import use_named_args
 from skopt import gp_minimize
 import argparse
+import sys
 def animation_plot(image, threshold, std, sg, bg, name):
     """
     Create a git from a for loop of imshow
@@ -227,6 +228,7 @@ class ResultGeneration:
 
 
 
+
     def calc_metrics(self, filters, path, rebin, clustering):
         """Apply filter on images and calculate metrics
            input filters that will be applied and folder where the output file will be saved
@@ -237,7 +239,7 @@ class ResultGeneration:
         for file in file_names:
             image_dict = self.input_images[file]
             image_index = image_dict.keys()
-            image_index = np.random.choice(list(image_index), 5)
+            image_index = np.random.choice(list(image_index), 50, replace=False)
             bar = Bar('Loading', fill='@', suffix='%(percent)d%%')
             for image_name in image_index:
                 a = time()
@@ -246,11 +248,15 @@ class ResultGeneration:
                 ipx_truth = image_dict[image_name]
                 ipx_truth = np.array(ipx_truth)
                 im_truth = np.zeros_like(im_ped)
-                im_truth[ipx_truth[:,0], ipx_truth[:, 1]] = ipx_truth[:, 2]
-                noise_sample = np.random.normal(loc=im_ped, scale=std)
-                im_real = im_truth + noise_sample
-                im_no_pad = im_real - im_ped
-                im_bin = im_truth > 0
+                try:
+                    im_truth[ipx_truth[:,0], ipx_truth[:, 1]] = ipx_truth[:, 2]
+                    noise_sample = np.random.normal(loc=im_ped, scale=std)
+                    im_real = im_truth + noise_sample
+                    im_no_pad = im_real - im_ped
+                    im_bin = im_truth > 0
+                except Exception as e:
+                    print('Fail loading :' + file + '/' + image_name + '\n Error:' + str(e))
+                    continue
                 denoising_filter = DenoisingFilters(im_no_pad)
                 image_batch = np.empty([0, im_no_pad.shape[0], im_no_pad.shape[1]])
                 for key in filters:
@@ -261,6 +267,7 @@ class ResultGeneration:
                         for param in params:
                             if param is 'lut':
                                 param = [image_index]
+
                             with Timer() as t1:
                                 image_filtered = func(denoising_filter, *param)
                             self.answer['time'].append(str(t1.cycles))

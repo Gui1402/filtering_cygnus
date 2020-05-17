@@ -1,7 +1,11 @@
-install:
+install-conda:
+	bash install-conda.sh
+
+install-conda-env:
 	conda env create -f environment.yml
 	conda activate mestrado-env
 
 run:
-	python src/filter_analysis.py
+	cd src
+	python filter_analysis.py
 
