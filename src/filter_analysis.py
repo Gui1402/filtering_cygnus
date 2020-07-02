@@ -18,6 +18,29 @@ from skopt.utils import use_named_args
 from skopt import gp_minimize
 import argparse
 import sys
+
+
+
+def do_roc_plot(rf, keys_array, file):
+    for index, key in list(enumerate(keys_array)):
+        plt.plot(rf[0][:, index],rf[1][:, index], label=key)
+    plt.legend()
+    plt.show()
+
+
+def do_image_hist_plot(im_bin, im_no_pad, file):
+    xs, ys = np.where(im_bin == True)
+    xb, yb = np.where(im_bin == False)
+    plt.hist(im_no_pad[xs, ys], log=True,
+             histtype='step', color='blue',
+             bins='scott', label='signal')
+    plt.hist(im_no_pad[xb, yb], log=True,
+             histtype='step', color='black',
+             bins='scott', label='background')
+
+    plt.legend()
+    plt.title(file)
+
 def animation_plot(image, threshold, std, sg, bg, name):
     """
     Create a git from a for loop of imshow
@@ -164,7 +187,7 @@ class ResultGeneration:
             output all h5 files in a list"""
         return glob.glob(self.folder + '/*.h5')  # get all h5 files on interest folder
 
-    def get_filter_results(self, im_no_pad, image_batch, im_bin, std, im_truth, keys, rebin=False):
+    def get_filter_results(self, im_no_pad, image_batch, im_bin, std, im_truth, keys, roc_type, rebin=False):
         """
         Build results after image filtering
         :param im_no_pad: Image after pedestal removing
@@ -178,11 +201,12 @@ class ResultGeneration:
         if 'cygno' in keys:
             cygno_index = np.where(keys == 'cygno')[0]
             image_cygno_batch = []
-            metrics_cygno_object = Metrics(im_no_pad, image_cygno_batch, im_bin, std, im_truth, rebin)
+            #image_input, image_output, image_truth, image_std, img_truth_z, rebin, mode
+            metrics_cygno_object = Metrics(im_no_pad, image_cygno_batch, im_bin, std, im_truth, rebin, roc_type)
             cy_results = metrics_cygno_object.roc_build(method='global')
             #(roc_cy, roc_rb_me_cy, roc_rb_md_cy, threshold_array_cy, count_md, count_me, cy_energy) = cy_results
             image_batch = np.delete(image_batch, cygno_index, axis=0)
-            metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth, rebin)
+            metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth, rebin, roc_type)
             other_results = metrics.roc_build(method='global')
             for i in range(other_results.__len__()):
                 try:
@@ -206,9 +230,16 @@ class ResultGeneration:
             count_me = other_results[8]
             energy = other_results[9]
         else:
-            metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth, rebin)
+            metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth, rebin, roc_type)
             results = metrics.roc_build(method='global')
-            roc, roc_rb_me, roc_rb_md, threshold_array, count_md, count_me, energy = results
+            roc = (results[0], results[1])
+            roc_rb_me = (results[2], results[3])
+            roc_rb_md = (results[4], results[5])
+            threshold_array = results[6]
+            count_md = results[7]
+            count_me = results[8]
+            energy = results[9]
+            #roc, roc_rb_me, roc_rb_md, threshold_array, count_md, count_me, energy = results
         return roc, roc_rb_me, roc_rb_md, threshold_array, count_md, count_me, energy
 
     def cluster_analyzer(self, roc, th, image_batch, im_bin, std, keys_array, th_mode, bg_cut):
@@ -239,7 +270,7 @@ class ResultGeneration:
         for file in file_names:
             image_dict = self.input_images[file]
             image_index = image_dict.keys()
-            image_index = np.random.choice(list(image_index), 50, replace=False)
+            image_index = np.random.choice(list(image_index), 10, replace=False)
             bar = Bar('Loading', fill='@', suffix='%(percent)d%%')
             for image_name in image_index:
                 a = time()
@@ -257,6 +288,7 @@ class ResultGeneration:
                 except Exception as e:
                     print('Fail loading :' + file + '/' + image_name + '\n Error:' + str(e))
                     continue
+                #do_image_hist_plot(im_bin, im_no_pad, file)
                 denoising_filter = DenoisingFilters(im_no_pad)
                 image_batch = np.empty([0, im_no_pad.shape[0], im_no_pad.shape[1]])
                 for key in filters:
@@ -283,8 +315,10 @@ class ResultGeneration:
                         self.answer['time'].append(str(0))
 
                 keys_array = np.array(list(filters.keys()))
-                results = self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth, keys_array, rebin)
+                roc_type = 'precision'
+                results = self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth, keys_array, roc_type, rebin)
                 (rf, rme, rmd, th, count_md, count_me, energy_array) = results
+                #do_roc_plot(rf, keys_array, file)
                 if clustering is True:
                     self.cluster_analyzer(rmd,
                                           th,
@@ -295,7 +329,7 @@ class ResultGeneration:
                                           th_mode='apx',
                                           bg_cut=0.9)
                 self.answer['Energy']['image_truth'].append(im_truth.sum())
-                self.answer['Energy']['image_real'].append(im_no_pad.sum())
+                self.answer['Energy']['image_real'].append(im_no_pad[im_bin].sum())
                 self.answer['Energy']['image_after_threshold'].append(energy_array)
                 self.answer['ROC']['full'].append(rf)
                 self.answer['ROC']['rb_mean'].append(rme)

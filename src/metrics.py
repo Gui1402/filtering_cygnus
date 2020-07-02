@@ -8,6 +8,9 @@ from skimage.filters import laplace
 from skimage.measure import find_contours
 from skimage.transform import rotate
 from skimage.morphology import disk
+from sklearn.metrics import recall_score
+from sklearn.metrics import precision_score
+
 
 
 def roc_score(roc, threshold, param=0.9):
@@ -91,13 +94,14 @@ def cluster_features(img_clusters):
 
 class Metrics:
 
-    def __init__(self, image_input, image_output, image_truth, image_std, img_truth_z, rebin):
+    def __init__(self, image_input, image_output, image_truth, image_std, img_truth_z, rebin, mode):
         self._image_input = image_input
         self._image_output = image_output
         self._image_truth = image_truth
         self._image_std = image_std
         self._image_truth_z = img_truth_z
         self._try_rebin = rebin
+        self._roc_mode = mode
 
     def find_a_in_b(self, a, b):
         nrows, ncols = a.shape
@@ -112,15 +116,17 @@ class Metrics:
 
     def roc_build(self, method='global'):
         fs = FilterSettings()
+        xs, ys = np.where(self._image_truth == 1)
+        xb, yb = np.where(self._image_truth == 0)
         if len(self._image_output) == 0:
             method = 'local'
-            bound_sup = 5
-            bound_inf = -7
+            bound_sup = 16
+            bound_inf = -26
             self._image_output = self._image_input.reshape((1,) + self._image_input.shape)
         else:
-            bound_sup = 1.3 * np.percentile(np.percentile(self._image_output, 99, axis=2), 99, 1)
-            bound_inf = 0.7 * np.percentile(np.percentile(self._image_output, 1, axis=2), 1, 1)
-
+            # TODO: here I shouldn't have to do this
+            bound_inf = self._image_output[:, xs, ys].min(axis=1)
+            bound_sup = self._image_output[:, xs, ys].max(axis=1)
         if method == 'local':
             px_thr = np.broadcast_to(self._image_std, self._image_output.shape)
         else:
@@ -132,8 +138,6 @@ class Metrics:
         bg_ef = []
         energy_intersect = []
         thresholds = []
-        xs, ys = np.where(self._image_truth == 1)
-        xb, yb = np.where(self._image_truth == 0)
         if self._try_rebin:
             sg_ef_mean = []
             bg_ef_mean = []
@@ -168,7 +172,10 @@ class Metrics:
                 bg_ef_median = []
                 xs_md = []
                 xs_me = []
-            full_sg_eff, full_bg_eff, energy = self.roc_outputs(images_after_threshold, xs, ys, xb, yb)
+            full_sg_eff, full_bg_eff, energy = self.roc_outputs(images_after_threshold,
+                                                                xs, ys,
+                                                                xb, yb,
+                                                                self._roc_mode)
             sg_ef.append(full_sg_eff)
             bg_ef.append(full_bg_eff)
             energy_intersect.append(energy)
@@ -177,21 +184,47 @@ class Metrics:
                np.array(sg_ef_median), np.array(bg_ef_median),
                np.array(thresholds), len(xs_md), len(xs_me), np.array(energy_intersect)]
 
-    def roc_outputs(self, result, xs, ys, xb, yb):
+    def roc_outputs(self, result, xs, ys, xb, yb, mode):
         index_matrix = np.array(np.where(result[:, xs, ys] == True)).T
         index_matrix = np.append(index_matrix, np.array((xs[index_matrix[:, 1]], ys[index_matrix[:, 1]])).T,
                                  axis=1)[:, [0, 2, 3]]
+        ## TODO: Review this energy calc
         z_values = self._image_input[index_matrix[:, 1], index_matrix[:, 2]]
         z_values_split = np.split(z_values, np.cumsum(np.unique(index_matrix[:, 0], return_counts=True)[1])[:-1])
+        index_energy = np.unique(index_matrix[:, 0])
         energy = list(map(sum, z_values_split))
-        signal_pixels_eff = result[:, xs, ys].sum(axis=1) / len(xs)
-        background_pixels_eff = (result[:, xb, yb] == False).sum(axis=1) / len(xb)
+        energy_dict = dict(zip(index_energy, energy))
+        energy = [energy_dict.get(i, 0) for i in range(result.shape[0])]
+        signal_pixels_eff = []
+        background_pixels_eff = []
+        if mode == 'ROC':
 
-        # check energy shape
-        if len(energy) != result.shape[0]:
-            energy_adj = np.zeros(shape=(result.shape[0],))
-            energy_adj[result.sum(axis=1).sum(axis=1) != 0] = energy
-            energy = list(energy_adj)
+            signal_pixels_eff = result[:, xs, ys].sum(axis=1) / len(xs)
+        #background_pixels_eff = len(xs)/result.sum(axis=1).sum(axis=1)
+            background_pixels_eff = (result[:, xb, yb] == False).sum(axis=1) / len(xb)
+
+        elif mode == 'precision':
+            # n_images = result.shape[0]
+            # for n in range(n_images):
+            #     y_true = self._image_truth.ravel()
+            #     y_pred = result[n, ...].ravel()
+            #     signal_pixels_eff.append(recall_score(y_true, y_pred))
+            #     background_pixels_eff.append(precision_score(y_true, y_pred))
+            # signal_pixels_eff = np.array(signal_pixels_eff)
+            # background_pixels_eff = np.array(background_pixels_eff)
+            background_pixels_eff = result[:, xs, ys].sum(axis=1)/result.sum(axis=1).sum(axis=1)
+            signal_pixels_eff = result[:, xs, ys].sum(axis=1) / len(xs)
+        else:
+            print('Invalid mode')
+
+        # # check energy shape
+        # if len(energy) != result.shape[0]:
+        #     energy_adj = np.zeros(shape=(result.shape[0],))
+        #     try:
+        #         energy_adj[(result.sum(axis=1).sum(axis=1) )!= 0] = energy
+        #         energy = list(energy_adj)
+        #     except ValueError:
+        #         energy = list(np.zeros(shape=(result.shape[0])))
 
 
         return signal_pixels_eff, background_pixels_eff, energy
