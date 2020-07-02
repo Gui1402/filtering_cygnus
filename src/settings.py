@@ -10,7 +10,7 @@ class FilterSettings:
         self.inf = -26
         self.roc_grid = 120
         self.output_file_path = '../data/'
-        self.output_file_name = 'energy_results'
+        self.output_file_name = 'energy_results_nlmeans_median_bm3d'
         self.filters = {
 
                         #'bilateral': [[i, j, k] for i in range(3, 19, 2) for j in range(1, 5, 2) for k in range(1, 19, 2)],
