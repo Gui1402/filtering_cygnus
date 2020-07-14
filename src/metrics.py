@@ -120,8 +120,10 @@ class Metrics:
         xb, yb = np.where(self._image_truth == 0)
         if len(self._image_output) == 0:
             method = 'local'
-            bound_sup = 16
-            bound_inf = -26
+            # bound_sup = 6
+            # bound_inf = -26
+            bound_inf = self._image_input[xs, ys].min()
+            bound_sup = self._image_input[xs, ys].max()
             self._image_output = self._image_input.reshape((1,) + self._image_input.shape)
         else:
             # TODO: here I shouldn't have to do this
@@ -185,16 +187,20 @@ class Metrics:
                np.array(thresholds), len(xs_md), len(xs_me), np.array(energy_intersect)]
 
     def roc_outputs(self, result, xs, ys, xb, yb, mode):
-        index_matrix = np.array(np.where(result[:, xs, ys] == True)).T
-        index_matrix = np.append(index_matrix, np.array((xs[index_matrix[:, 1]], ys[index_matrix[:, 1]])).T,
-                                 axis=1)[:, [0, 2, 3]]
-        ## TODO: Review this energy calc
-        z_values = self._image_input[index_matrix[:, 1], index_matrix[:, 2]]
-        z_values_split = np.split(z_values, np.cumsum(np.unique(index_matrix[:, 0], return_counts=True)[1])[:-1])
-        index_energy = np.unique(index_matrix[:, 0])
-        energy = list(map(sum, z_values_split))
-        energy_dict = dict(zip(index_energy, energy))
-        energy = [energy_dict.get(i, 0) for i in range(result.shape[0])]
+        energy = []
+        intersect_maps = result & self._image_truth
+        for intersect_id in range(intersect_maps.shape[0]):
+            energy.append(np.sum(self._image_input[intersect_maps[intersect_id, :, :]]))
+        # index_matrix = np.array(np.where(result[:, xs, ys] == True)).T
+        # index_matrix = np.append(index_matrix, np.array((xs[index_matrix[:, 1]], ys[index_matrix[:, 1]])).T,
+        #                          axis=1)[:, [0, 2, 3]]
+        # ## TODO: Review this energy calc
+        # z_values = self._image_input[index_matrix[:, 1], index_matrix[:, 2]]
+        # z_values_split = np.split(z_values, np.cumsum(np.unique(index_matrix[:, 0], return_counts=True)[1])[:-1])
+        # index_energy = np.unique(index_matrix[:, 0])
+        # energy = list(map(sum, z_values_split))
+        # energy_dict = dict(zip(index_energy, energy))
+        # energy = [energy_dict.get(i, 0) for i in range(result.shape[0])]
         signal_pixels_eff = []
         background_pixels_eff = []
         if mode == 'ROC':

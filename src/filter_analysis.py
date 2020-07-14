@@ -270,7 +270,7 @@ class ResultGeneration:
         for file in file_names:
             image_dict = self.input_images[file]
             image_index = image_dict.keys()
-            image_index = np.random.choice(list(image_index), 20, replace=False)
+            image_index = np.random.choice(list(image_index), 8, replace=False)
             bar = Bar('Loading', fill='@', suffix='%(percent)d%%')
             for image_name in image_index:
                 a = time()
