@@ -25,6 +25,9 @@ def do_roc_plot(rf, keys_array, file):
     for index, key in list(enumerate(keys_array)):
         plt.plot(rf[0][:, index],rf[1][:, index], label=key)
     plt.legend()
+    plt.grid()
+    plt.xlabel('recall')
+    plt.ylabel('precision')
     plt.show()
 
 

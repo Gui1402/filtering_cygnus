@@ -120,10 +120,10 @@ class Metrics:
         xb, yb = np.where(self._image_truth == 0)
         if len(self._image_output) == 0:
             method = 'local'
-            # bound_sup = 6
-            # bound_inf = -26
-            bound_inf = self._image_input[xs, ys].min()
-            bound_sup = self._image_input[xs, ys].max()
+            bound_sup = 16
+            bound_inf = -20
+            #bound_inf = self._image_input[xs, ys].min()
+            #bound_sup = self._image_input[xs, ys].max()
             self._image_output = self._image_input.reshape((1,) + self._image_input.shape)
         else:
             # TODO: here I shouldn't have to do this

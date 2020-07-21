@@ -11,6 +11,7 @@ from dn_cnn_test import NnTest
 sys.path.append('fcdnn/')
 sys.path.append('/fcdnn')
 from core.test_blind_ft import Fine_tuning as test_ft
+from skimage.restoration import denoise_tv_bregman
 
 class DenoisingFilters:
 
@@ -88,6 +89,10 @@ class DenoisingFilters:
         filtered_image = (filtered_image * delta) - low
         filtered_image = filtered_image - filtered_image.mean()
         return filtered_image
+
+    def tv_filter(self, w):
+        return denoise_tv_bregman(self._image_input, w)
+
 
 
 
