@@ -93,6 +93,9 @@ class DenoisingFilters:
     def tv_filter(self, w):
         return denoise_tv_bregman(self._image_input, w)
 
+    def wavelets_filter(self, param):
+        return param
+
 
 
 
