@@ -3,6 +3,11 @@ import numpy as np
 import itertools
 import pandas as pd
 
+def find_nearest(array, value):
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return idx, array[idx]
+
 def load_data(path):
     with open(path, 'r') as JSON:
         json_dict = json.load(JSON)
@@ -47,12 +52,14 @@ def tab_data(json_file):
     array_list = data_struct(array_list)
     roc_x = np.array(data['ROC']['full'])[:, 0, :, :]
     roc_y = np.array(data['ROC']['full'])[:, 1, :, :]
+    threshold = np.array(data['ROC']['threshold'])[:,:,:,0,0] 
     roc_x_list = data_struct(roc_x)
     roc_y_list = data_struct(roc_y)
+    threshold_list = data_struct(threshold)
     base = base.loc[base.index.repeat(n_filters)].reset_index(drop=True)
     base['filter'] = data['Filter_name']
     base['parameter'] = data['Filter_parameter']
-    array_df = pd.DataFrame({'energy_after_threshold':array_list, 'recall': roc_x_list, 'precision': roc_y_list})
+    array_df = pd.DataFrame({'energy_after_threshold':array_list, 'recall': roc_x_list, 'precision': roc_y_list, 'threshold_all': threshold_list})
     array_df = array_df.reset_index(drop=True)
     return base.join(array_df)
 

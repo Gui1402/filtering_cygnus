@@ -1,30 +1,14 @@
 import numpy as np
 import h5py
 import glob
-from progress.bar import Bar
 from settings import FilterSettings
 from filters import DenoisingFilters
 from metrics import Metrics
 import json
-from time import time
 from hwcounter import Timer
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from metrics import roc_score, image_rebin
-from sklearn.cluster import DBSCAN
-from sklearn.neighbors import NearestNeighbors
-from skopt.space import Real, Integer
-from skopt.utils import use_named_args
-from skopt import gp_minimize
 from tqdm import tqdm
-import argparse
-import sys
-import os
-from skimage.morphology import label
-from skimage.measure import regionprops, regionprops_table
-
-
-
 
 def do_roc_plot(rf, keys_array, file):
     for index, key in list(enumerate(keys_array)):
@@ -74,61 +58,7 @@ def animation_plot(image, threshold, std, sg, bg, name):
         print(ani.to_html5_video(), file=f)
 
 
-def apply_dbscan(image_batch, im_bin, std_map, threshold_array, key_names, rebin_mode):
-    """
-    DBSCAN clustering find optimal parameters
 
-    :param image_batch: Filtered images that will be evaluated (k, M, N)
-    :param threshold_array: threshold select from roc curves (k,)
-    :param key_names: Filter names (k,)
-    :return: best point, best parameters, clusters
-    """
-    returns = {'filter_name': [],
-               'best_point': [],
-               'best_parameters': [],
-               'labels': []
-               }
-    index = 0
-    image_truth_rebin = image_rebin(im_bin, rebin_factor=4, mode=rebin_mode)
-    for th, name in zip(threshold_array, key_names):
-        if name == 'cygno':
-            std = std_map
-        else:
-            std = np.ones(shape=(image_batch.shape[-2], image_batch.shape[-1]))
-        image_binary = image_batch[index, ...] > th*std
-        image_binary_rebin = image_rebin(image_binary, rebin_factor=4, mode=rebin_mode)
-        x_coord, y_coord = np.where(image_binary_rebin == True)
-        X = np.array([x_coord, y_coord]).T
-        index += 1
-        neigh = NearestNeighbors(n_neighbors=2)
-        nbrs = neigh.fit(X)
-        distances, indices = nbrs.kneighbors(X)
-        y = image_truth_rebin[X[:, 0], X[:, 1]].astype(float)
-        eps_low = distances[distances>0].min()
-        eps_high = distances.max()
-        if(eps_high <= eps_low):
-            eps_high = 20
-            eps_low = 0.5
-        space = [Integer(0, 1000, name='min_samples'),
-                 Real(eps_low, eps_high , "log-uniform", name='eps')]
-        @use_named_args(space)
-        def objective(**params):
-            m = DBSCAN(**params)
-            l = m.fit(X).labels_
-            result = l != -1
-            sd = float(result[y == True].sum()) / sum(y == True)
-            br = float((result[y == False] == False).sum()) / sum(y == False)
-            f1 = 2 * (sd * br) / (sd + br)
-            return 1 - f1
-
-        res_gp = gp_minimize(objective, space, n_calls=50, random_state=0)
-        m = DBSCAN(min_samples=res_gp.x[0], eps=res_gp.x[1])
-        labels = m.fit(X).labels_
-        returns['filter_name'].append(name)
-        returns['best_point'].append(res_gp.fun)
-        returns['best_parameters'].append([res_gp.x[1], res_gp.x[0]])
-        returns['labels'].append(np.append(X, labels.reshape(-1,1), axis=1))
-    return returns
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -156,19 +86,17 @@ class ResultGeneration:
         self.bound_inf = bound_inf    # the lower bound to remove outliers
         self.roc_grid = roc_grid      # number of points to generate roc curve
         self.input_images = None
-        self.answer = {'Image_path': [], 'Image_index': [], 'Filter_name': [], 'Filter_parameter': [], 'time': [],
+        self.answer = {'Image_path': [],
+                       'Image_index': [],
+                       'Filter_name': [],
+                       'Filter_parameter': [],
+                       'time': [],
                        'ROC': {'full': [],
-                               'rb_mean': [],
-                               'rb_median': [],
                                'threshold': []},
                        'Energy': {'image_truth': [],
                                   'image_real': [],
                                   'image_after_threshold': []},
-                       'Counts': {'full': [],
-                                  'rb_mean': [],
-                                  'rb_median': []},
-                       'Clustering': {'mean': [],
-                                      'median':[]}
+                       'Counts': []
                        }
 
     # get pedestal from noise file
@@ -214,7 +142,7 @@ class ResultGeneration:
         :param keys: Name of filters that were applied
         :return: roc curves, thresholds array used, pixels amount in truth images and energy curves
         """
-        if 'cygno' in keys:
+        if ('cygno' in keys) & (len(keys) > 1):
             cygno_index = np.where(keys == 'cygno')[0]
             image_cygno_batch = []
             #image_input, image_output, image_truth, image_std, img_truth_z, rebin, mode
@@ -237,41 +165,18 @@ class ResultGeneration:
                     except AttributeError:
                         other_results[i] = None
 
-            #roc, roc_rb_me, roc_rb_md, threshold_array, count_md, count_me, energy = other_results
             roc = (other_results[0], other_results[1])
-            roc_rb_me = (other_results[2], other_results[3])
-            roc_rb_md = (other_results[4], other_results[5])
-            threshold_array = other_results[6]
-            count_md = other_results[7]
-            count_me = other_results[8]
-            energy = other_results[9]
+            threshold_array = other_results[2]
+            energy = other_results[3]
         else:
             metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth, rebin, roc_type)
             results = metrics.roc_build(method='global')
             roc = (results[0], results[1])
-            roc_rb_me = (results[2], results[3])
-            roc_rb_md = (results[4], results[5])
-            threshold_array = results[6]
-            count_md = results[7]
-            count_me = results[8]
-            energy = results[9]
-            #roc, roc_rb_me, roc_rb_md, threshold_array, count_md, count_me, energy = results
-        return roc, roc_rb_me, roc_rb_md, threshold_array, count_md, count_me, energy
+            threshold_array = results[2]
+            energy = results[3]
+        return roc, threshold_array, energy
 
-    def cluster_analyzer(self, roc, th, image_batch, im_bin, std, keys_array, th_mode, bg_cut):
-        if th_mode == 'interpolation':
-            p_choose = roc_score(roc, th, param=bg_cut)
-            th_choose = [float(value) for value in p_choose['bg_constant'][0][1]]
-        else:
-            th_choose = abs(bg_cut - roc[1]).argmin(axis=0)
-            th_choose = th[th_choose, range(th.shape[1]), 0, 0]
-        for mode in ['mean', 'median']:
-            self.answer['Clustering'][mode].append(apply_dbscan(image_batch,
-                                                                im_bin,
-                                                                std,
-                                                                th_choose,
-                                                                keys_array,
-                                                                rebin_mode=mode))
+
 
     def image_generator(self, value_pixels, ped_map, std_map):
         """
@@ -314,7 +219,7 @@ class ResultGeneration:
                 self.answer['time'].append(str(0))
         return image_batch
 
-    def calc_metrics(self, filters, path, filtering, rebin, clustering):
+    def calc_metrics(self, filters, path, images):
         """Apply filter on images and calculate metrics
            input filters that will be applied and folder where the output file will be saved
            output an output file with results"""
@@ -324,7 +229,7 @@ class ResultGeneration:
         for file in tqdm(file_names, desc='Path applying'):
             image_dict = self.input_images[file]
             image_index = image_dict.keys()
-            image_index = np.random.choice(list(image_index), 8, replace=False)
+            image_index = np.random.permutation(list(image_index))[0:images]
             for image_name in tqdm(image_index, desc='Image applying'):
                 ipx_truth = image_dict[image_name]
                 ipx_truth = np.array(ipx_truth)
@@ -333,39 +238,29 @@ class ResultGeneration:
                 except Exception as e:
                     print('Fail loading :' + file + '/' + image_name + '\n Error:' + str(e))
                     continue
-                if filtering:
-                    image_batch = self.filters_apply(im_no_pad, filters)
-                    keys_array = np.array(list(filters.keys()))
-                    roc_type = 'precision'
-                    results = self.get_filter_results(im_no_pad, image_batch, im_bin, std, im_truth, keys_array, roc_type, rebin)
-                    (rf, rme, rmd, th, count_md, count_me, energy_array) = results
-                    #do_roc_plot(rf, keys_array, file)
-                    if clustering is True:
-                        self.cluster_analyzer(rmd,
-                                              th,
-                                              image_batch,
-                                              im_bin,
-                                              std,
-                                              keys_array,
-                                              th_mode='apx',
-                                              bg_cut=0.9)
-                    self.answer['Energy']['image_truth'].append(im_truth.sum())
-                    self.answer['Energy']['image_real'].append(im_no_pad[im_bin].sum())
-                    self.answer['Energy']['image_after_threshold'].append(energy_array)
-                    self.answer['ROC']['full'].append(rf)
-                    self.answer['ROC']['rb_mean'].append(rme)
-                    self.answer['ROC']['rb_median'].append(rmd)
-                    self.answer['ROC']['threshold'].append(th)
-                    self.answer['Counts']['full'].append(str(im_bin.sum()))
-                    self.answer['Counts']['rb_mean'].append(str(count_me))
-                    self.answer['Counts']['rb_median'].append(str(count_md))
-                    self.answer['Image_index'].append(image_name)
-                    self.answer['Image_path'].append(file)
-                    self.save_json(path)
+                image_batch = self.filters_apply(im_no_pad, filters)
+                keys_array = np.array(list(filters.keys()))
+                roc_type = 'precision'
+                results = self.get_filter_results(im_no_pad,
+                                                  image_batch,
+                                                  im_bin,
+                                                  std,
+                                                  im_truth,
+                                                  keys_array,
+                                                  roc_type)
+                (rf, th, energy_array) = results
+                #do_roc_plot(rf, keys_array, file)
+                self.answer['Energy']['image_truth'].append(im_truth.sum())
+                self.answer['Energy']['image_real'].append(im_no_pad[im_bin].sum())
+                self.answer['Energy']['image_after_threshold'].append(energy_array)
+                self.answer['ROC']['full'].append(rf)
+                self.answer['ROC']['threshold'].append(th)
+                self.answer['Counts'].append(str(im_bin.sum()))
+                self.answer['Image_index'].append(image_name)
+                self.answer['Image_path'].append(file)
+                self.save_json(path)
 
-
-
-def database_generator(path, mode='classification'):
+def main():
     filter_settings = FilterSettings()
     data_folder = filter_settings.data_folder
     noise_file = filter_settings.noise_file
@@ -373,69 +268,14 @@ def database_generator(path, mode='classification'):
     sup = filter_settings.sup
     inf = filter_settings.inf
     roc_grid = filter_settings.roc_grid
-    data = ResultGeneration(data_folder, noise_file, run_number, sup, inf, roc_grid)
-    im_ped, std = data.get_pedestal()
-    data.load_images()
-    file_names = data.input_images.keys()
-    row_shape = []
-    col_shape = []
-    count_nuclear = 0
-    count_eletron = 0
-    for file in tqdm(file_names, desc='Path load'):
-        image_dict = data.input_images[file]
-        image_index = image_dict.keys()
-        #image_index = np.random.choice(list(image_index), 8, replace=False)
-        for image_name in tqdm(image_index, desc='Image loading'):
-            ipx_truth = image_dict[image_name]
-            ipx_truth = np.array(ipx_truth)
-            try:
-                im_no_pad, im_truth, im_bin = data.image_generator(ipx_truth, im_ped, std)
-                bound_sup = im_truth.max() + 4*std.mean()
-                bound_inf = -4*std.mean()
-                im_no_pad = np.clip(im_no_pad, bound_inf, bound_sup)
-                image_truth_cluster = regionprops(label_image=1 * im_bin, intensity_image=im_no_pad)
-                cluster = image_truth_cluster[0].intensity_image
-                row_len = cluster.shape[0]
-                col_len = cluster.shape[1]
-                row_shape.append(row_len)
-                col_shape.append(col_len)
-                if 'He' in file:
-                    particle = 'nuclear'
-                    count_nuclear += 1
-                    number = count_nuclear
-                else:
-                    count_eletron += 1
-                    particle = 'eletron'
-                    number = count_eletron
-
-                plt.imsave(path + 'train'+ '/' + particle + '/' + str(number) + '.jpg', cluster, cmap='gray')
-            except Exception as e:
-                print('Fail loading :' + file + '/' + image_name + '\n Error:' + str(e))
-                continue
-    print(np.mean(row_shape), np.mean(col_shape))
-
-
-
-def main(filtering, rebin, clustering):
-    filter_settings = FilterSettings()
-    data_folder = filter_settings.data_folder
-    noise_file = filter_settings.noise_file
-    run_number = filter_settings.run_number
-    sup = filter_settings.sup
-    inf = filter_settings.inf
-    roc_grid = filter_settings.roc_grid
+    n_samples = filter_settings.nsamples
     data = ResultGeneration(data_folder, noise_file, run_number, sup, inf, roc_grid)
     filters = filter_settings.filters
     path = filter_settings.output_file_path + filter_settings.output_file_name
-    data.calc_metrics(filters=filters, path=path, filtering=filtering, rebin=rebin, clustering=clustering)
+    data.calc_metrics(filters=filters, path=path, images=n_samples)
 
 
 if __name__ == "__main__":
-    #parser = argparse.ArgumentParser()
-    #parser.add_argument("--rebin", type=bool, help="If rebin will be analyzed")
-    #parser.add_argument("--cluster", type=bool, help="If clustering will be analyzed")
-    #args = parser.parse_args()
-    #print(getattr(args, 'cluster'))
-    #main(True, False, False)
-    database_generator('../data/')
+    main()
+
 
