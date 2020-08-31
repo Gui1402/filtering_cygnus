@@ -11,7 +11,7 @@ class FilterSettings:
         self.roc_grid = 120
         self.nsamples = 8
         self.output_file_path = '../data/'
-        self.output_file_name = 'test_bar'
+        self.output_file_name = 'cygno_adjusted'
         self.filters = {
 
                         #'bilateral': [[i, j, k] for i in range(3, 19, 2) for j in range(1, 5, 2) for k in range(1, 19, 2)],
@@ -19,13 +19,15 @@ class FilterSettings:
                         #'nlmeans':[[11, 7]],
                         #'mean': [[3], [7], [9], [11], [13], [17], [21], [23]],
                         #'gaussian': [[3], [7], [9], [11], [13], [17], [21], [23]],
-                        #'gaussian': [[11]],
+                        'gaussian': [[11]],
                         #'mean': [[7]],
                         #'median': [[3], [5], [7], [9], [11], [13], [15], [17], [19], [21], [23], [25], [27]],
                         #'wiener': [[1], [2]],
                         #'bm3D': [[1], [2], [3], [4], [5], [6], [7], [8]],
                         'cygno': [],
-                        #'tv': [[.1], [.2], [.3], [.4], [.5], [.6], [.7], [.8], [.9]]
+                        #'tv': [[.1], [.2], [.3], [.4], [.5], [.6], [.7], [.8], [.9]],
                         #'wavelets' : [[None]]
                         }
 
+        self.thresholds = {'cygno': [1.3],
+                           'gaussian': [2.]}

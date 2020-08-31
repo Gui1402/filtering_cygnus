@@ -69,6 +69,7 @@ def dataframe_column_adj(dataframe):
     seg_df.energy = seg_df.energy.astype(np.int)
     df['parameter'] = df.parameter.apply(lambda x: x[0])
     df.parameter[df.parameter == 'n'] = 0
+    df.parameter[df.parameter.isnull()] = 0
     df.parameter = df.parameter.astype(np.int)
     df = seg_df.join(df.reset_index().drop('index', axis=1)).drop(['path'], axis=1)
     df['f1'] = df.apply(lambda x: max((2*np.array(x['recall'])*np.array(x['precision']))/(np.array(x['recall']) + np.array(x['precision']))), axis=1)

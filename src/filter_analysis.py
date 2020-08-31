@@ -131,7 +131,7 @@ class ResultGeneration:
         with open(path + '.json', 'w') as f:
             json.dump(dumped, f)
 
-    def get_filter_results(self, im_no_pad, image_batch, im_bin, std, im_truth, keys, roc_type, rebin=False):
+    def get_filter_results(self, im_no_pad, image_batch, im_bin, std, im_truth, keys, thresholds, mode='eval'):
         """
         Build results after image filtering
         :param im_no_pad: Image after pedestal removing
@@ -140,18 +140,17 @@ class ResultGeneration:
         :param std: Std map
         :param im_truth: Truth image
         :param keys: Name of filters that were applied
+        :param grid: Number of samples roc will be built
         :return: roc curves, thresholds array used, pixels amount in truth images and energy curves
         """
         if ('cygno' in keys) & (len(keys) > 1):
             cygno_index = np.where(keys == 'cygno')[0]
             image_cygno_batch = []
-            #image_input, image_output, image_truth, image_std, img_truth_z, rebin, mode
-            metrics_cygno_object = Metrics(im_no_pad, image_cygno_batch, im_bin, std, im_truth, rebin, roc_type)
-            cy_results = metrics_cygno_object.roc_build(method='global')
-            #(roc_cy, roc_rb_me_cy, roc_rb_md_cy, threshold_array_cy, count_md, count_me, cy_energy) = cy_results
+            metrics_cygno_object = Metrics(im_no_pad, image_cygno_batch, im_bin, std, im_truth)
+            cy_results = metrics_cygno_object.roc_build(self.roc_grid, method='local')
             image_batch = np.delete(image_batch, cygno_index, axis=0)
-            metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth, rebin, roc_type)
-            other_results = metrics.roc_build(method='global')
+            metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth)
+            other_results = metrics.roc_build(self.roc_grid, method='global')
             for i in range(other_results.__len__()):
                 try:
                     other_results[i] = np.append(other_results[i], cy_results[i], axis=1)
@@ -169,8 +168,11 @@ class ResultGeneration:
             threshold_array = other_results[2]
             energy = other_results[3]
         else:
-            metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth, rebin, roc_type)
-            results = metrics.roc_build(method='global')
+            metrics = Metrics(im_no_pad, image_batch, im_bin, std, im_truth)
+            if ('cygno' in keys):
+                results = metrics.roc_build(self.roc_grid, method='local')
+            else:
+                results = metrics.roc_build(self.roc_grid, method='global')
             roc = (results[0], results[1])
             threshold_array = results[2]
             energy = results[3]
@@ -194,9 +196,14 @@ class ResultGeneration:
         image_bin = image_mask > 0
         return im_no_ped, image_mask, image_bin
 
-    def filters_apply(self, im_no_pad, filters):
+    def filters_apply(self, im_no_pad, filters, im_std):
         denoising_filter = DenoisingFilters(im_no_pad)
         image_batch = np.empty([0, im_no_pad.shape[0], im_no_pad.shape[1]])
+        std_batch = np.empty([0, im_no_pad.shape[0], im_no_pad.shape[1]])
+
+        # TODO: Change bound inf and sup to max and min xs,ys
+        bound_inf = []
+        bound_sup = []
         for key in filters:
             if key is not 'cygno':
                 filter_name = key + '_filter'
@@ -210,19 +217,26 @@ class ResultGeneration:
                     image_batch = np.append(image_batch, image_filtered_standardized.reshape((1,) +
                                                                                              image_filtered.shape),
                                             axis=0)
+                    std_batch = np.append(std_batch, np.ones(((1,) + image_filtered.shape)), axis=0)
+                    bound_inf.append(image_filtered_standardized.min())
+                    bound_sup.append(image_filtered_standardized.max())
                     self.answer['Filter_name'].append(key)
                     self.answer['Filter_parameter'].append(param)
             else:
                 image_batch = np.append(image_batch, im_no_pad.reshape((1,) + im_no_pad.shape), axis=0)
+                std_batch = np.append(std_batch, im_std.reshape((1,) + im_std.shape), axis=0)
+                bound_inf.append(-20)
+                bound_sup.append(4)
                 self.answer['Filter_name'].append(key)
                 self.answer['Filter_parameter'].append('none')
                 self.answer['time'].append(str(0))
-        return image_batch
+        return image_batch, std_batch, bound_inf, bound_sup
 
-    def calc_metrics(self, filters, path, images):
+    def calc_metrics(self, filters, path, images, mode, thresholds):
         """Apply filter on images and calculate metrics
            input filters that will be applied and folder where the output file will be saved
            output an output file with results"""
+        #TODO: Create a method towards build batches
         im_ped, std = self.get_pedestal()
         self.load_images()
         file_names = self.input_images.keys()
@@ -238,16 +252,16 @@ class ResultGeneration:
                 except Exception as e:
                     print('Fail loading :' + file + '/' + image_name + '\n Error:' + str(e))
                     continue
-                image_batch = self.filters_apply(im_no_pad, filters)
+                image_batch, std_batch, inf, sup = self.filters_apply(im_no_pad, filters, std)
                 keys_array = np.array(list(filters.keys()))
-                roc_type = 'precision'
                 results = self.get_filter_results(im_no_pad,
                                                   image_batch,
                                                   im_bin,
                                                   std,
                                                   im_truth,
                                                   keys_array,
-                                                  roc_type)
+                                                  thresholds=thresholds,
+                                                  mode=mode)
                 (rf, th, energy_array) = results
                 #do_roc_plot(rf, keys_array, file)
                 self.answer['Energy']['image_truth'].append(im_truth.sum())
@@ -260,7 +274,7 @@ class ResultGeneration:
                 self.answer['Image_path'].append(file)
                 self.save_json(path)
 
-def main():
+def main(mode):
     filter_settings = FilterSettings()
     data_folder = filter_settings.data_folder
     noise_file = filter_settings.noise_file
@@ -272,10 +286,11 @@ def main():
     data = ResultGeneration(data_folder, noise_file, run_number, sup, inf, roc_grid)
     filters = filter_settings.filters
     path = filter_settings.output_file_path + filter_settings.output_file_name
-    data.calc_metrics(filters=filters, path=path, images=n_samples)
+    thresholds = np.array(filter_settings.thresholds)
+    data.calc_metrics(filters=filters, path=path, images=n_samples, mode=mode, thresholds=thresholds)
 
 
 if __name__ == "__main__":
-    main()
+    main(None)
 
 
