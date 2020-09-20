@@ -54,31 +54,23 @@ def image_rebin(image_input, rebin_factor, mode='mean', threshold=0):
 
 class Metrics:
 
-    def __init__(self, image_input, image_output, image_truth, image_std, img_truth_z):
+    def __init__(self, image_input, image_output, image_truth, image_std, img_truth_z, threshold):
         self._image_input = image_input
         self._image_output = image_output
         self._image_truth = image_truth
         self._image_std = image_std
         self._image_truth_z = img_truth_z
+        self._threshold_list = threshold
 
-    def roc_build(self, grid, method='global'):
+
+
+    def roc_build(self, grid, return_last=False):
         xs, ys = np.where(self._image_truth == 1)
-        # TODO: put std ped as an argument, each filter will pass our own std ped (all ones for all except cygno)
-        if len(self._image_output) == 0:
-            method = 'local'
-            bound_sup = 4
-            bound_inf = -20
-            self._image_output = self._image_input.reshape((1,) + self._image_input.shape)
-        else:
-            # TODO: here I shouldn't have to do this
-            bound_inf = self._image_output[:, xs, ys].min(axis=1)
-            bound_sup = self._image_output[:, xs, ys].max(axis=1)
-        if method == 'local':
-            px_thr = np.broadcast_to(self._image_std, self._image_output.shape)
-        else:
-            px_thr = np.ones_like(self._image_output)
-
+        bound_sup = self._threshold_list[1]
+        bound_inf = self._threshold_list[0]
         step = (bound_sup - bound_inf) / grid
+        if sum(step == np.zeros_like(step)) == len(step):
+            grid = 0
         sg_ef = []
         bg_ef = []
         energy_intersect = []
@@ -89,17 +81,67 @@ class Metrics:
                 thr = thr.reshape(-1, 1, 1)
             except AttributeError:
                 thr = thr
-            images_after_threshold = self._image_output > (thr * px_thr)
+            threshold_matrix = thr * self._image_std
+            images_after_threshold = self._image_output > threshold_matrix
             full_sg_eff, full_bg_eff, energy = self.roc_outputs(images_after_threshold,
                                                                 xs, ys)
             sg_ef.append(full_sg_eff)
             bg_ef.append(full_bg_eff)
             energy_intersect.append(energy)
             thresholds.append(thr)
-        return [np.nan_to_num(np.array(sg_ef)),
-                np.nan_to_num(np.array(bg_ef)),
-                np.array(thresholds),
-                np.array(energy_intersect)]
+        if return_last:
+
+            return [np.array(sg_ef),
+                    np.array(bg_ef),
+                    np.array(thresholds),
+                    np.array(energy_intersect)], images_after_threshold
+        else:
+            return [np.array(sg_ef),
+                    np.array(bg_ef),
+                    np.array(thresholds),
+                    np.array(energy_intersect)]
+
+
+
+    # def roc_build(self, grid, method='global'):
+    #     xs, ys = np.where(self._image_truth == 1)
+    #     # TODO: put std ped as an argument, each filter will pass our own std ped (all ones for all except cygno)
+    #     if len(self._image_output) == 0:
+    #         method = 'local'
+    #         bound_sup = 4
+    #         bound_inf = -20
+    #         self._image_output = self._image_input.reshape((1,) + self._image_input.shape)
+    #     else:
+    #         # TODO: here I shouldn't have to do this
+    #         bound_inf = self._image_output[:, xs, ys].min(axis=1)
+    #         bound_sup = self._image_output[:, xs, ys].max(axis=1)
+    #     if method == 'local':
+    #         px_thr = np.broadcast_to(self._image_std, self._image_output.shape)
+    #     else:
+    #         px_thr = np.ones_like(self._image_output)
+    #
+    #     step = (bound_sup - bound_inf) / grid
+    #     sg_ef = []
+    #     bg_ef = []
+    #     energy_intersect = []
+    #     thresholds = []
+    #     for i in range(0, grid + 1):
+    #         thr = bound_inf + i * step
+    #         try:
+    #             thr = thr.reshape(-1, 1, 1)
+    #         except AttributeError:
+    #             thr = thr
+    #         images_after_threshold = self._image_output > (thr * px_thr)
+    #         full_sg_eff, full_bg_eff, energy = self.roc_outputs(images_after_threshold,
+    #                                                             xs, ys)
+    #         sg_ef.append(full_sg_eff)
+    #         bg_ef.append(full_bg_eff)
+    #         energy_intersect.append(energy)
+    #         thresholds.append(thr)
+    #     return [np.nan_to_num(np.array(sg_ef)),
+    #             np.nan_to_num(np.array(bg_ef)),
+    #             np.array(thresholds),
+    #             np.array(energy_intersect)]
 
     def roc_outputs(self, result, xs, ys):
         energy = []
@@ -121,21 +163,21 @@ class Metrics:
 
         return signal_pixels_eff, background_pixels_eff, energy
 
-    def image_evaluator(self, threshold_value, method='global'):
-        xs, ys = np.where(self._image_truth == 1)
-        if method == 'local':
-            px_thr = np.broadcast_to(self._image_std, self._image_output.shape)
-        else:
-            px_thr = np.ones_like(self._image_output)
-        try:
-            threshold_value = threshold_value.reshape(-1, 1, 1)
-        except AttributeError:
-            threshold_value = threshold_value
-
-        images_after_threshold = self._image_output > (threshold_value * px_thr)
-        recall, precision, energy = self.roc_outputs(images_after_threshold, xs, ys)
-
-        return images_after_threshold, recall, precision, energy
+    # def image_evaluator(self, threshold_value, method='global'):
+    #     xs, ys = np.where(self._image_truth == 1)
+    #     if method == 'local':
+    #         px_thr = np.broadcast_to(self._image_std, self._image_output.shape)
+    #     else:
+    #         px_thr = np.ones_like(self._image_output)
+    #     try:
+    #         threshold_value = threshold_value.reshape(-1, 1, 1)
+    #     except AttributeError:
+    #         threshold_value = threshold_value
+    #
+    #     images_after_threshold = self._image_output > (threshold_value * px_thr)
+    #     recall, precision, energy = self.roc_outputs(images_after_threshold, xs, ys)
+    #
+    #     return images_after_threshold, recall, precision, energy
 
 
 
