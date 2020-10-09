@@ -214,7 +214,7 @@ class ResultGeneration:
         bound_inf = []
         bound_sup = []
         for key in filters:
-            if key is not 'cygno':
+            if key != 'cygno':
                 filter_name = key + '_filter'
                 try:
                     func = getattr(DenoisingFilters, filter_name)
@@ -260,18 +260,19 @@ class ResultGeneration:
             energy = results[3]
             return roc, threshold_array, energy
         else:
-            _, image = metrics.roc_build(self.roc_grid, return_last=True)
-            return image
+            logs, image = metrics.roc_build(self.roc_grid, return_last=True)
+            return image, logs
 
 
 
-    def calc_metrics(self, filters, path, images):
+    def calc_metrics(self, filters, packs, path, images):
         """Apply filter on images and calculate metrics
            input filters that will be applied and folder where the output file will be saved
            output an output file with results"""
         im_ped, std = self.get_pedestal()
         self.load_images()
         file_names = self.input_images.keys()
+        file_names = list(np.intersect1d(list(file_names), packs))
         for file in tqdm(file_names, desc='Path applying'):
             image_dict = self.input_images[file]
             image_index = image_dict.keys()
@@ -280,7 +281,8 @@ class ResultGeneration:
                 ipx_truth = image_dict[image_name]
                 ipx_truth = np.array(ipx_truth)
                 try:
-                    im_no_pad, im_truth, im_bin = self.image_generator(ipx_truth, im_ped, std)
+                    seed = SEED[file][image_name]
+                    im_no_pad, im_truth, im_bin = self.image_generator(ipx_truth, im_ped, std, seed=seed)
                 except Exception as e:
                     print('Fail loading :' + file + '/' + image_name + '\n Error:' + str(e))
                     continue
@@ -310,15 +312,23 @@ class ResultGeneration:
 
 
     def image_from_metrics(self, filter_files, images):
-        output_dict = {'path': [], 'image': [], 'filter': [], 'points': []}
-        dataframe, packs = filter_files
+        output_dict = {'path': [],
+                       'image': [],
+                       'filter': [],
+                       'points': [],
+                       'cl_integral': [],
+                       'cl_integral_intersect': [],
+                       'cl_integral_ped_effect': [],
+                       'cl_integral_truth': []}
+        dataframe, packs, select_filters = filter_files
         input_data = open(dataframe).read()
         params = json.loads(input_data)#json.loads(json.loads(input_data)[0])
         out_dict = {}
         threshold_value = []
         for dict_p in params:
-            out_dict.update({dict_p['filter']: [[dict_p['parameter']]]})
-            threshold_value.append(dict_p['threshold'])
+            if dict_p['filter'] in select_filters:
+                out_dict.update({dict_p['filter']: [[dict_p['parameter']]]})
+                threshold_value.append(dict_p['threshold'])
 
         im_ped, std = self.get_pedestal()
         self.load_images()
@@ -338,10 +348,17 @@ class ResultGeneration:
                 except Exception as e:
                     print('Fail loading :' + file + '/' + image_name + '\n Error:' + str(e))
                     continue
+                # e_t = []
+                # q_space = np.linspace(1, 0, 100)
+                # en_max = im_truth.sum()
+                # for q in q_space:
+                #     t = np.quantile(im_truth[im_truth > 0], q)
+                #     energy_upper = (im_truth[im_truth>=t]).sum()
+                #     e_t.append(energy_upper/en_max)
                 image_batch, std_batch, inf, sup = self.filters_apply(im_no_pad, im_bin, out_dict, std)
                 threshold = [np.array(threshold_value), np.array(threshold_value)]
                 #threshold = [np.array(inf), np.array(sup)]
-                results = self.build_results(im_no_pad, im_bin, image_batch, std_batch, im_truth, threshold, mode='eval')
+                results, logs = self.build_results(im_no_pad, im_bin, image_batch, std_batch, im_truth, threshold, mode='eval')
                 ## add truth to results
                 results = np.append(results, im_bin.reshape((1,) + im_bin.shape), axis=0)
                 index_matrix = np.array(np.where(results == True)).T
@@ -353,8 +370,12 @@ class ResultGeneration:
                     output_dict['image'].append(image_name)
                     output_dict['filter'].append(applied_filters[i])
                     output_dict['points'].append(pts)
+                    output_dict['cl_integral_truth'].append(im_truth.sum())
+                    output_dict['cl_integral_ped_effect'].append(im_no_pad[im_bin].sum())
+                    output_dict['cl_integral'].append(im_no_pad[results[i, :, :]].sum())
+                    output_dict['cl_integral_intersect'].append(im_no_pad[results[i, :, :] & im_bin].sum())
 
-                save_json(output_dict, '../data/run_clustering')
+                save_json(output_dict, '../data/run_clustering_median_cygno_gaussian_truth_estimated_by_all')
                 image_counter+=1
             print('Path {} has been done with {} images processed'.format(file, image_counter))
         print('\n Process has been finished')
@@ -367,11 +388,12 @@ def main(mode):
     inf = filter_settings.inf
     roc_grid = filter_settings.roc_grid
     n_samples = filter_settings.nsamples
+    used_packs = filter_settings.packs
     data = ResultGeneration(data_folder, noise_file, run_number, sup, inf, roc_grid)
     if mode == 'build':
         filters = filter_settings.filters
         path = filter_settings.output_file_path + filter_settings.output_file_name
-        data.calc_metrics(filters=filters, path=path, images=n_samples)
+        data.calc_metrics(filters=filters, packs=used_packs, path=path, images=n_samples)
     elif mode == 'eval':
         pre_processing_params = filter_settings.preprocessing_params
         data.image_from_metrics(pre_processing_params, n_samples)
